@@ -11,6 +11,7 @@ import { InfoBanner } from '@/components/ui/InfoBanner';
 import { LoadingState, ErrorState } from '@/components/ui/States';
 import { fetchSites, submitObservation, validatePhoto } from '@/lib/observationService';
 import { runQualityGate } from '@/lib/qualityGate';
+import { saveObservationQualityCheck } from '@/lib/evidenceService';
 import type { QualityGateResult } from '@/types';
 import type { SiteRow } from '@/types';
 import { QualityCheckSection } from '@/components/features/QualityCheckSection';
@@ -201,6 +202,16 @@ export function ReportPage() {
       }
       setCompletedSteps((prev) => [...prev, ...steps.map((_, i) => i)]);
       setSubmitState('success');
+
+      // Persist the Phase 3 quality-check result (best-effort, non-blocking)
+      if (qualityResult) {
+        try {
+          await saveObservationQualityCheck(result.observation.id, qualityResult);
+        } catch {
+          // Quality-check persistence is secondary to the observation itself.
+          // The citizen observation remains the authoritative source.
+        }
+      }
     } catch {
       setSubmitError('We could not save your observation. Please check your connection and try again.');
       setSubmitState('error');

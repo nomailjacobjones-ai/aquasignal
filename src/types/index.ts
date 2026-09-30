@@ -182,3 +182,70 @@ export interface QualityGateResult {
   evidence_observations: EvidenceObservation[];
   explanation: string;
 }
+
+// =========================================================
+// Phase 4A — Evidence Chain Backend types
+// =========================================================
+
+export type QualityCheckEngineType = 'rules';
+
+export interface ObservationQualityCheckRow {
+  id: string;
+  observation_id: string;
+  overall_status: QualityGateStatus;
+  completeness: number;
+  issues: QualityIssue[];
+  clarification_questions: ClarificationQuestion[];
+  evidence_observations: EvidenceObservation[];
+  explanation: string | null;
+  engine_type: QualityCheckEngineType;
+  created_at: string;
+}
+
+export type EnvironmentalSignalStatus = 'emerging' | 'monitoring' | 'resolved' | 'dismissed';
+
+export type SignalContributionType = 'primary' | 'corroborating' | 'contextual';
+
+export interface EnvironmentalSignalRow {
+  id: string;
+  site_id: string | null;
+  signal_type: string;
+  title: string;
+  description: string | null;
+  status: EnvironmentalSignalStatus;
+  strength: number;
+  observation_count: number;
+  indicator_count: number;
+  time_window_hours: number;
+  first_observed_at: string | null;
+  last_observed_at: string | null;
+  reasoning: unknown[];
+  is_demo: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SignalObservationRow {
+  id: string;
+  signal_id: string;
+  observation_id: string;
+  contribution_type: SignalContributionType | null;
+  created_at: string;
+}
+
+export type SignalEvidenceType =
+  | 'observation_count'
+  | 'time_cluster'
+  | 'indicator'
+  | 'photo'
+  | 'quality_check';
+
+export interface SignalEvidenceRow {
+  id: string;
+  signal_id: string;
+  evidence_type: SignalEvidenceType;
+  label: string;
+  value: string | null;
+  source_observation_id: string | null;
+  created_at: string;
+}
