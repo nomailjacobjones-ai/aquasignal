@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { MapPin, Filter, Layers, Eye, MapPinned, Database } from 'lucide-react';
+import { MapPin, Filter, Layers, Eye, MapPinned, Database, TrendingUp } from 'lucide-react';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { LoadingState, ErrorState } from '@/components/ui/States';
 import {
@@ -9,8 +9,10 @@ import {
   type SiteWithObservationCount,
   type ObservationWithSite,
 } from '@/lib/dashboardService';
+import { fetchSignalsWithSites, type EnvironmentalSignalWithSite } from '@/lib/evidenceService';
+import type { EnvironmentalSignalStatus } from '@/types';
 
-type MarkerType = 'site' | 'observation';
+type MarkerType = 'site' | 'observation' | 'signal';
 
 interface MapMarkerData {
   id: string;
@@ -21,13 +23,23 @@ interface MapMarkerData {
   siteId?: string;
   isDemo?: boolean;
   observationCount?: number;
+  signalStatus?: EnvironmentalSignalStatus;
+  signalStrength?: number;
 }
 
 const typeFilters = [
   { value: 'all', label: 'All' },
   { value: 'site', label: 'Sites' },
   { value: 'observation', label: 'Observations' },
+  { value: 'signal', label: 'Signals' },
 ];
+
+const signalStatusColors: Record<EnvironmentalSignalStatus, string> = {
+  emerging: 'bg-amber-500 border-amber-300',
+  monitoring: 'bg-aqua-500 border-aqua-300',
+  resolved: 'bg-success-500 border-success-300',
+  dismissed: 'bg-sand-400 border-sand-300',
+};
 
 export function MapPage() {
   const [typeFilter, setTypeFilter] = useState<string>('all');
@@ -35,6 +47,7 @@ export function MapPage() {
 
   const [sites, setSites] = useState<SiteWithObservationCount[]>([]);
   const [observations, setObservations] = useState<ObservationWithSite[]>([]);
+  const [signals, setSignals] = useState<EnvironmentalSignalWithSite[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
@@ -42,12 +55,14 @@ export function MapPage() {
     setLoading(true);
     setError(false);
     try {
-      const [siteData, obsData] = await Promise.all([
+      const [siteData, obsData, signalData] = await Promise.all([
         fetchSitesWithCounts(),
         fetchRecentObservations(50),
+        fetchSignalsWithSites(),
       ]);
       setSites(siteData);
       setObservations(obsData);
+      setSignals(signalData);
     } catch {
       setError(true);
     } finally {
@@ -81,6 +96,18 @@ export function MapPage() {
         siteId: o.site_id ?? undefined,
         isDemo: o.is_demo,
       })),
+    ...signals
+      .filter((s) => s.sites?.latitude != null && s.sites?.longitude != null)
+      .map((s) => ({
+        id: `signal-${s.id}`,
+        type: 'signal' as const,
+        label: s.title,
+        lat: Number(s.sites!.latitude),
+        lng: Number(s.sites!.longitude),
+        siteId: s.site_id ?? undefined,
+        signalStatus: s.status,
+        signalStrength: s.strength,
+      })),
   ];
 
   const filtered = markers.filter((m) => {
@@ -107,7 +134,7 @@ export function MapPage() {
     <div className="px-4 sm:px-6 lg:px-8 py-8">
       <PageHeader
         title="Observation Map"
-        subtitle="Freshwater observations and monitoring sites across the catchment area."
+        subtitle="Freshwater observations, monitoring sites, and emerging environmental signals across the catchment area."
         icon={<MapPin className="w-5.5 h-5.5" />}
         breadcrumbs={[{ label: 'Home', to: '/' }, { label: 'Map' }]}
       />
@@ -169,13 +196,16 @@ export function MapPage() {
             {filtered.map((marker) => {
               const { x, y } = normalize(marker.lat, marker.lng);
               const isSite = marker.type === 'site';
+              const isSignal = marker.type === 'signal';
               const isDemo = marker.isDemo;
-              const size = isSite ? 'w-3.5 h-3.5' : 'w-4 h-4';
-              const colorClass = isSite
-                ? 'bg-aqua-500 border-aqua-300'
-                : isDemo
-                  ? 'bg-sand-400 border-sand-300'
-                  : 'bg-amber-500 border-amber-300';
+              const size = isSite ? 'w-3.5 h-3.5' : isSignal ? 'w-5 h-5' : 'w-4 h-4';
+              const colorClass = isSignal
+                ? signalStatusColors[marker.signalStatus ?? 'emerging']
+                : isSite
+                  ? 'bg-aqua-500 border-aqua-300'
+                  : isDemo
+                    ? 'bg-sand-400 border-sand-300'
+                    : 'bg-amber-500 border-amber-300';
               const isSelected = selectedMarker?.id === marker.id;
 
               return (
@@ -184,7 +214,7 @@ export function MapPage() {
                   onClick={() => setSelectedMarker(marker)}
                   className={`absolute ${size} rounded-full border-2 ${colorClass} shadow-soft transition-all duration-200 hover:scale-125 ${
                     isSelected ? 'ring-4 ring-aqua-200 scale-125 z-10' : 'z-0'
-                  }`}
+                  } ${isSignal ? 'ring-2 ring-offset-1 ring-aqua-100' : ''}`}
                   style={{ left: `${x}%`, top: `${y}%`, transform: 'translate(-50%, -50%)' }}
                   aria-label={`${marker.type}: ${marker.label}`}
                 />
@@ -203,6 +233,9 @@ export function MapPage() {
               <div className="flex items-center gap-2 text-xs text-sand-600">
                 <span className="w-3 h-3 rounded-full bg-sand-400 border-2 border-sand-300" /> Demo observation
               </div>
+              <div className="flex items-center gap-2 text-xs text-sand-600">
+                <span className="w-5 h-5 rounded-full bg-amber-500 border-2 border-amber-300 ring-2 ring-aqua-100" /> Environmental signal
+              </div>
             </div>
 
             {/* Map info badge */}
@@ -218,6 +251,7 @@ export function MapPage() {
                 <div className="flex items-center gap-2 mb-3">
                   {selectedMarker.type === 'observation' && <Eye className="w-4.5 h-4.5 text-sand-500" />}
                   {selectedMarker.type === 'site' && <MapPinned className="w-4.5 h-4.5 text-sand-500" />}
+                  {selectedMarker.type === 'signal' && <TrendingUp className="w-4.5 h-4.5 text-sand-500" />}
                   <span className="text-xs font-medium text-sand-500 uppercase tracking-wide">{selectedMarker.type}</span>
                 </div>
                 <h3 className="text-base font-semibold text-sand-900">{selectedMarker.label}</h3>
@@ -239,11 +273,30 @@ export function MapPage() {
                       <span className="text-sand-800 font-medium">{selectedMarker.observationCount}</span>
                     </div>
                   )}
+                  {selectedMarker.signalStrength !== undefined && (
+                    <div className="flex justify-between">
+                      <span className="text-sand-500">Evidence Strength</span>
+                      <span className="text-sand-800 font-medium tabular-nums">{selectedMarker.signalStrength}/100</span>
+                    </div>
+                  )}
+                  {selectedMarker.signalStatus && (
+                    <div className="flex justify-between">
+                      <span className="text-sand-500">Status</span>
+                      <span className="text-sand-800 font-medium capitalize">{selectedMarker.signalStatus}</span>
+                    </div>
+                  )}
                 </div>
                 {selectedMarker.type === 'observation' && selectedMarker.id.replace('obs-', '') && (
                   <Link to={`/signals/${selectedMarker.id.replace('obs-', '')}`} className="mt-4 block">
                     <button className="w-full px-4 py-2 text-sm font-medium text-aqua-700 border border-aqua-200 rounded-lg hover:bg-aqua-50 transition-colors">
                       View Observation Details
+                    </button>
+                  </Link>
+                )}
+                {selectedMarker.type === 'signal' && selectedMarker.id.replace('signal-', '') && (
+                  <Link to={`/signals/${selectedMarker.id.replace('signal-', '')}`} className="mt-4 block">
+                    <button className="w-full px-4 py-2 text-sm font-medium text-aqua-700 border border-aqua-200 rounded-lg hover:bg-aqua-50 transition-colors">
+                      View Signal Details
                     </button>
                   </Link>
                 )}
