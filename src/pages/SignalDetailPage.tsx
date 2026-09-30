@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, MapPin, Clock, Camera, AlertCircle,
   FileText, Droplets, Wind, Leaf, Bird, StickyNote, ImageOff,
   TrendingUp, Layers, ChevronDown, Database,
+  Sparkles, RefreshCw, CheckCircle2, AlertTriangle,
 } from 'lucide-react';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { InfoBanner } from '@/components/ui/InfoBanner';
@@ -24,7 +25,8 @@ import {
   type SignalObservationWithDetails,
 } from '@/lib/evidenceService';
 import { getObservationQualityCheck } from '@/lib/evidenceService';
-import type { SignalEvidenceRow, ObservationQualityCheckRow, EnvironmentalSignalStatus } from '@/types';
+import { getSignalExplanation, generateSignalExplanation } from '@/lib/aiExplanationService';
+import type { SignalEvidenceRow, ObservationQualityCheckRow, EnvironmentalSignalStatus, SignalAIExplanation } from '@/types';
 
 function formatDateTime(iso: string): string {
   return new Date(iso).toLocaleString('en-AU', {
@@ -69,6 +71,10 @@ export function SignalDetailPage() {
   const [observation, setObservation] = useState<ObservationWithPhotos | null>(null);
   const [relatedObs, setRelatedObs] = useState<ObservationWithSite[]>([]);
   const [photoErrors, setPhotoErrors] = useState<Set<string>>(new Set());
+  const [aiExplanation, setAiExplanation] = useState<SignalAIExplanation | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState(false);
+  const aiGeneratingRef = useRef(false);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -98,6 +104,15 @@ export function SignalDetailPage() {
           }
         }
         setQualityChecks(qChecks);
+
+        // Fetch existing AI explanation if available
+        try {
+          const existing = await getSignalExplanation(id);
+          setAiExplanation(existing);
+        } catch {
+          setAiExplanation(null);
+        }
+
         setMode('signal');
         return;
       }
@@ -125,6 +140,22 @@ export function SignalDetailPage() {
   const handlePhotoError = (path: string) => {
     setPhotoErrors((prev) => new Set(prev).add(path));
   };
+
+  const handleGenerateAI = useCallback(async () => {
+    if (!id || aiGeneratingRef.current) return;
+    aiGeneratingRef.current = true;
+    setAiLoading(true);
+    setAiError(false);
+    try {
+      const explanation = await generateSignalExplanation(id);
+      setAiExplanation(explanation);
+    } catch {
+      setAiError(true);
+    } finally {
+      setAiLoading(false);
+      aiGeneratingRef.current = false;
+    }
+  }, [id]);
 
   // ── Loading ──────────────────────────────────────────────
   if (mode === 'loading') {
@@ -330,6 +361,14 @@ export function SignalDetailPage() {
             </div>
           </div>
         )}
+
+        {/* AI Evidence Brief */}
+        <AIEvidenceBriefSection
+          explanation={aiExplanation}
+          loading={aiLoading}
+          error={aiError}
+          onGenerate={handleGenerateAI}
+        />
 
         {/* Supporting observations */}
         {signalObs.length > 0 && (

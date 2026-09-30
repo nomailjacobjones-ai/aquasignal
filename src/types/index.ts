@@ -249,3 +249,34 @@ export interface SignalEvidenceRow {
   source_observation_id: string | null;
   created_at: string;
 }
+
+// =========================================================
+// Phase 4C — AI Evidence Explanation types
+// =========================================================
+
+export interface SignalAIExplanationRow {
+  id: string;
+  signal_id: string;
+  summary: string;
+  supporting_evidence: string[];
+  uncertainties: string[];
+  recommended_review: string | null;
+  disclaimer: string;
+  provider: string | null;
+  model: string | null;
+  engine_type: string;
+  is_fallback: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SignalAIExplanation {
+  summary: string;
+  supporting_evidence: string[];
+  uncertainties: string[];
+  recommended_review: string;
+  disclaimer: string;
+  is_fallback: boolean;
+  provider: string | null;
+  model: string | null;
+}
