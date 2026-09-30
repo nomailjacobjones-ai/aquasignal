@@ -7,6 +7,8 @@ import type {
   QualityGateResult,
   SignalContributionType,
   SignalEvidenceType,
+  SiteRow,
+  ObservationRow,
 } from '@/types';
 
 // ── Observation quality checks ──────────────────────────
@@ -169,4 +171,59 @@ export async function getSignalEvidence(
 
   if (error) throw error;
   return data ?? [];
+}
+
+// ── Signal fetch helpers (Phase 4B) ─────────────────────
+
+export interface EnvironmentalSignalWithSite extends EnvironmentalSignalRow {
+  sites: Pick<SiteRow, 'id' | 'name' | 'region' | 'latitude' | 'longitude'> | null;
+}
+
+export interface SignalObservationWithDetails extends SignalObservationRow {
+  observations: ObservationRow;
+}
+
+export async function fetchSignalsWithSites(): Promise<EnvironmentalSignalWithSite[]> {
+  const { data, error } = await supabase
+    .from('environmental_signals')
+    .select(`
+      *,
+      sites:site_id (
+        id, name, region, latitude, longitude
+      )
+    `)
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  return (data ?? []) as unknown as EnvironmentalSignalWithSite[];
+}
+
+export async function fetchSignalById(id: string): Promise<EnvironmentalSignalWithSite | null> {
+  const { data, error } = await supabase
+    .from('environmental_signals')
+    .select(`
+      *,
+      sites:site_id (
+        id, name, region, latitude, longitude
+      )
+    `)
+    .eq('id', id)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data as unknown as EnvironmentalSignalWithSite | null;
+}
+
+export async function fetchSignalObservationsWithDetails(signalId: string): Promise<SignalObservationWithDetails[]> {
+  const { data, error } = await supabase
+    .from('signal_observations')
+    .select(`
+      *,
+      observations:observation_id (*)
+    `)
+    .eq('signal_id', signalId)
+    .order('created_at', { ascending: true });
+
+  if (error) throw error;
+  return (data ?? []) as unknown as SignalObservationWithDetails[];
 }
