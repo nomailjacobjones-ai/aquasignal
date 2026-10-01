@@ -321,3 +321,75 @@ export interface SignalOneHealthContext {
   context_notes: string[];
   disclaimer: string;
 }
+
+// =========================================================
+// Phase 5B — FHIR R4 Interoperability types
+// =========================================================
+
+export interface FhirCoding {
+  system: string;
+  code: string;
+  display: string;
+}
+
+export interface FhirCodeableConcept {
+  coding: FhirCoding[];
+  text?: string;
+}
+
+export interface FhirReference {
+  reference: string;
+  display?: string;
+}
+
+export interface FhirExtension {
+  url: string;
+  [key: string]: unknown;
+}
+
+export interface FhirObservationComponent {
+  code: FhirCodeableConcept;
+  valueString: string;
+}
+
+export interface FhirObservation {
+  resourceType: 'Observation';
+  id: string;
+  status: 'preliminary' | 'final' | 'registered';
+  code: FhirCodeableConcept;
+  subject?: FhirReference;
+  effectiveDateTime?: string;
+  effectivePeriod?: { start: string; end: string };
+  note?: { text: string }[];
+  component: FhirObservationComponent[];
+  extension?: FhirExtension[];
+}
+
+export interface FhirLocation {
+  resourceType: 'Location';
+  id: string;
+  name: string;
+  position?: { latitude: number; longitude: number };
+  address?: { city?: string; region?: string; country?: string };
+}
+
+export interface FhirMedia {
+  resourceType: 'Media';
+  id: string;
+  status: 'available';
+  subject?: FhirReference;
+  createdDateTime?: string;
+  note?: { text: string }[];
+}
+
+export interface FhirBundleEntry {
+  fullUrl: string;
+  resource: FhirObservation | FhirLocation | FhirMedia;
+}
+
+export interface FhirBundle {
+  resourceType: 'Bundle';
+  type: 'collection';
+  timestamp: string;
+  entry: FhirBundleEntry[];
+}

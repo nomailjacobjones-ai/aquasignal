@@ -5,7 +5,7 @@ import {
   FileText, Droplets, Wind, Leaf, Bird, StickyNote, ImageOff,
   TrendingUp, Layers, ChevronDown, Database,
   Sparkles, RefreshCw, CheckCircle2, AlertTriangle,
-  ClipboardCheck, Heart, Users, Fish,
+  ClipboardCheck, Heart, Users, Fish, Download, Share, FileJson, Table, X,
 } from 'lucide-react';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { InfoBanner } from '@/components/ui/InfoBanner';
@@ -29,7 +29,8 @@ import { getObservationQualityCheck } from '@/lib/evidenceService';
 import { getSignalExplanation, generateSignalExplanation } from '@/lib/aiExplanationService';
 import { getSignalReview, reviewDecisionLabels, reviewDecisionChipStyles } from '@/lib/reviewService';
 import { getOrGenerateOneHealthContext } from '@/lib/oneHealthService';
-import type { SignalEvidenceRow, ObservationQualityCheckRow, EnvironmentalSignalStatus, SignalAIExplanation, SignalReviewRow, SignalOneHealthContext } from '@/types';
+import { buildSignalBundle, buildNativeJsonExport, buildCsvExport, downloadFhir, downloadNativeJson, downloadCsv } from '@/lib/fhirService';
+import type { SignalEvidenceRow, ObservationQualityCheckRow, EnvironmentalSignalStatus, SignalAIExplanation, SignalReviewRow, SignalOneHealthContext, ObservationPhotoRow } from '@/types';
 
 function formatDateTime(iso: string): string {
   return new Date(iso).toLocaleString('en-AU', {
@@ -80,6 +81,7 @@ export function SignalDetailPage() {
   const aiGeneratingRef = useRef(false);
   const [review, setReview] = useState<SignalReviewRow | null>(null);
   const [oneHealth, setOneHealth] = useState<SignalOneHealthContext | null>(null);
+  const [showExport, setShowExport] = useState(false);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -455,12 +457,33 @@ export function SignalDetailPage() {
           It has not been scientifically validated. An environmental expert should review the evidence before any action is taken.
         </InfoBanner>
 
+        {/* Export */}
+        {showExport && (
+          <ExportPanel
+            signal={signal}
+            signalObs={signalObs}
+            signalEvidence={signalEvidence}
+            qualityChecks={qualityChecks}
+            review={review}
+            aiExplanation={aiExplanation}
+            oneHealth={oneHealth}
+            onClose={() => setShowExport(false)}
+          />
+        )}
+
         {/* Actions */}
         <div className="mt-6 flex flex-wrap gap-3">
           <Link to="/signals">
             <PrimaryButton>All Signals</PrimaryButton>
           </Link>
           <SecondaryButton to="/map">View on Map</SecondaryButton>
+          <button
+            onClick={() => setShowExport((v) => !v)}
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-aqua-700 bg-white border border-aqua-200 rounded-xl hover:bg-aqua-50 transition-colors"
+          >
+            <Share className="w-4 h-4" />
+            Export Interoperability Package
+          </button>
         </div>
       </>
     );
@@ -993,6 +1016,173 @@ function OneHealthContextSection({ context }: { context: SignalOneHealthContext 
 
       <div className="mt-4 pt-4 border-t border-sand-100">
         <p className="text-xs text-sand-400 leading-relaxed">{context.disclaimer}</p>
+      </div>
+    </div>
+  );
+}
+
+function ExportPanel({
+  signal,
+  signalObs,
+  signalEvidence,
+  qualityChecks,
+  review,
+  aiExplanation,
+  oneHealth,
+  onClose,
+}: {
+  signal: EnvironmentalSignalWithSite;
+  signalObs: SignalObservationWithDetails[];
+  signalEvidence: SignalEvidenceRow[];
+  qualityChecks: Map<string, ObservationQualityCheckRow | null>;
+  review: SignalReviewRow | null;
+  aiExplanation: SignalAIExplanation | null;
+  oneHealth: SignalOneHealthContext | null;
+  onClose: () => void;
+}) {
+  const [exporting, setExporting] = useState(false);
+  const [error, setError] = useState(false);
+
+  const handleFhir = () => {
+    setExporting(true);
+    setError(false);
+    try {
+      const allPhotos: ObservationPhotoRow[] = [];
+      const photoUrls = new Map<string, string>();
+      for (const so of signalObs) {
+        for (const photo of (so as SignalObservationWithDetails & { observations: { photos?: ObservationPhotoRow[] } }).observations?.photos ?? []) {
+          allPhotos.push(photo);
+          photoUrls.set(photo.id, getPhotoUrl(photo.storage_path));
+        }
+      }
+      const observations = signalObs.map((so) => so.observations);
+      const bundle = buildSignalBundle(
+        signal,
+        signal.sites,
+        observations,
+        allPhotos,
+        photoUrls,
+        signalEvidence,
+        review,
+        aiExplanation,
+        oneHealth,
+      );
+      downloadFhir(bundle, signal.id);
+    } catch {
+      setError(true);
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleJson = () => {
+    setExporting(true);
+    setError(false);
+    try {
+      const observations = signalObs.map((so) => so.observations);
+      const qualityCheckArray = Array.from(qualityChecks.entries())
+        .filter(([, qc]) => qc !== null)
+        .map(([obsId, qc]) => ({
+          observation_id: obsId,
+          overall_status: qc!.overall_status,
+          completeness: qc!.completeness,
+          explanation: qc!.explanation,
+        }));
+      const data = buildNativeJsonExport(
+        signal,
+        signal.sites,
+        observations,
+        signalEvidence,
+        qualityCheckArray,
+        oneHealth,
+        review,
+        aiExplanation,
+      );
+      downloadNativeJson(data, signal.id);
+    } catch {
+      setError(true);
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleCsv = () => {
+    setExporting(true);
+    setError(false);
+    try {
+      const observations = signalObs.map((so) => so.observations);
+      const siteName = signal.sites?.name ?? null;
+      const csv = buildCsvExport(signal, observations, siteName, review);
+      downloadCsv(csv, signal.id);
+    } catch {
+      setError(true);
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  return (
+    <div className="surface p-6 mb-6">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2.5">
+          <Share className="w-5 h-5 text-aqua-600" />
+          <h3 className="text-base font-semibold text-sand-900">Interoperability Export</h3>
+        </div>
+        <button onClick={onClose} className="text-sand-400 hover:text-sand-600 transition-colors">
+          <X className="w-5 h-5" />
+        </button>
+      </div>
+
+      <div className="grid sm:grid-cols-3 gap-4 mb-4">
+        <button
+          onClick={handleFhir}
+          disabled={exporting}
+          className="flex flex-col items-start gap-2 p-4 text-left bg-white border border-aqua-200 rounded-xl hover:bg-aqua-50 transition-colors disabled:opacity-50"
+        >
+          <div className="flex items-center gap-2">
+            <FileJson className="w-5 h-5 text-aqua-600" />
+            <span className="text-sm font-semibold text-sand-900">FHIR R4</span>
+          </div>
+          <p className="text-xs text-sand-500">Portable structured representation of this environmental evidence package.</p>
+        </button>
+
+        <button
+          onClick={handleJson}
+          disabled={exporting}
+          className="flex flex-col items-start gap-2 p-4 text-left bg-white border border-sand-200 rounded-xl hover:bg-sand-50 transition-colors disabled:opacity-50"
+        >
+          <div className="flex items-center gap-2">
+            <Download className="w-5 h-5 text-sand-600" />
+            <span className="text-sm font-semibold text-sand-900">JSON</span>
+          </div>
+          <p className="text-xs text-sand-500">Native AquaSignal structured export.</p>
+        </button>
+
+        <button
+          onClick={handleCsv}
+          disabled={exporting}
+          className="flex flex-col items-start gap-2 p-4 text-left bg-white border border-sand-200 rounded-xl hover:bg-sand-50 transition-colors disabled:opacity-50"
+        >
+          <div className="flex items-center gap-2">
+            <Table className="w-5 h-5 text-sand-600" />
+            <span className="text-sm font-semibold text-sand-900">CSV</span>
+          </div>
+          <p className="text-xs text-sand-500">Tabular observation export.</p>
+        </button>
+      </div>
+
+      {error && (
+        <div className="flex items-center gap-2 text-sm text-sand-600 mb-4">
+          <AlertTriangle className="w-4 h-4 text-amber-500" />
+          <span>Export failed. Please try again.</span>
+        </div>
+      )}
+
+      <div className="p-4 rounded-lg bg-aqua-50 border border-aqua-100">
+        <p className="text-xs font-medium text-aqua-700 mb-1">What is FHIR?</p>
+        <p className="text-xs text-sand-600 leading-relaxed">
+          FHIR is an interoperability standard for exchanging structured information between systems. AquaSignal provides a prototype FHIR R4-compatible export of environmental observations and related evidence. This is not formal HL7 certification or a validated OneAquaHealth profile.
+        </p>
       </div>
     </div>
   );
