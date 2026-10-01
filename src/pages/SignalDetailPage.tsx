@@ -5,6 +5,7 @@ import {
   FileText, Droplets, Wind, Leaf, Bird, StickyNote, ImageOff,
   TrendingUp, Layers, ChevronDown, Database,
   Sparkles, RefreshCw, CheckCircle2, AlertTriangle,
+  ClipboardCheck,
 } from 'lucide-react';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { InfoBanner } from '@/components/ui/InfoBanner';
@@ -26,7 +27,8 @@ import {
 } from '@/lib/evidenceService';
 import { getObservationQualityCheck } from '@/lib/evidenceService';
 import { getSignalExplanation, generateSignalExplanation } from '@/lib/aiExplanationService';
-import type { SignalEvidenceRow, ObservationQualityCheckRow, EnvironmentalSignalStatus, SignalAIExplanation } from '@/types';
+import { getSignalReview, reviewDecisionLabels, reviewDecisionChipStyles } from '@/lib/reviewService';
+import type { SignalEvidenceRow, ObservationQualityCheckRow, EnvironmentalSignalStatus, SignalAIExplanation, SignalReviewRow } from '@/types';
 
 function formatDateTime(iso: string): string {
   return new Date(iso).toLocaleString('en-AU', {
@@ -75,6 +77,7 @@ export function SignalDetailPage() {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState(false);
   const aiGeneratingRef = useRef(false);
+  const [review, setReview] = useState<SignalReviewRow | null>(null);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -111,6 +114,14 @@ export function SignalDetailPage() {
           setAiExplanation(existing);
         } catch {
           setAiExplanation(null);
+        }
+
+        // Fetch existing human review if available
+        try {
+          const existingReview = await getSignalReview(id);
+          setReview(existingReview);
+        } catch {
+          setReview(null);
         }
 
         setMode('signal');
@@ -361,6 +372,38 @@ export function SignalDetailPage() {
             </div>
           </div>
         )}
+
+        {/* Human Review state */}
+        <div className="surface p-5 mb-6">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div className="flex items-center gap-2.5">
+              <ClipboardCheck className="w-5 h-5 text-aqua-600" />
+              <div>
+                <h3 className="text-base font-semibold text-sand-900">Human Review</h3>
+                {review ? (
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className={`chip ${reviewDecisionChipStyles[review.decision]}`}>
+                      <span className="w-1.5 h-1.5 rounded-full bg-sand-400" aria-hidden="true" />
+                      {reviewDecisionLabels[review.decision]}
+                    </span>
+                    <span className="text-xs text-sand-400">{formatDateTime(review.reviewed_at)}</span>
+                  </div>
+                ) : (
+                  <p className="text-sm text-sand-500 mt-0.5">Awaiting Human Review</p>
+                )}
+              </div>
+            </div>
+            <Link to="/review" className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-aqua-700 rounded-lg hover:bg-aqua-800 transition-colors">
+              {review ? 'Change Decision' : 'Review Signal'}
+            </Link>
+          </div>
+          {review?.notes && (
+            <div className="mt-3 p-3 rounded-lg bg-sand-50 border border-sand-100">
+              <p className="text-xs font-medium text-sand-500 mb-1">Reviewer notes</p>
+              <p className="text-sm text-sand-700 italic">"{review.notes}"</p>
+            </div>
+          )}
+        </div>
 
         {/* AI Evidence Brief */}
         <AIEvidenceBriefSection

@@ -1,189 +1,768 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { ClipboardCheck, ArrowRight, Eye, FileText, CheckCircle2, XCircle, Clock, AlertCircle } from 'lucide-react';
+import {
+  ClipboardCheck, ArrowRight, Eye, FileText, CheckCircle2,
+  XCircle, Clock, AlertCircle, TrendingUp, Layers, Database,
+  Sparkles, RefreshCw, AlertTriangle, ChevronDown, MapPin,
+} from 'lucide-react';
 import { PageHeader } from '@/components/ui/PageHeader';
-import { ConcernBadge, StatusBadge } from '@/components/ui/Badges';
-import { ConfidenceMeter } from '@/components/ui/ConfidenceMeter';
 import { InfoBanner } from '@/components/ui/InfoBanner';
-import { EmptyState } from '@/components/ui/States';
-import { mockReviewItems } from '@/data/mockData';
-import type { ReviewItem, SignalStatus } from '@/types';
+import { EmptyState, LoadingState, ErrorState } from '@/components/ui/States';
+import { fetchSignalsWithSites, fetchSignalObservationsWithDetails, getSignalEvidence, type EnvironmentalSignalWithSite, type SignalObservationWithDetails } from '@/lib/evidenceService';
+import { getObservationQualityCheck } from '@/lib/evidenceService';
+import { getSignalExplanation, generateSignalExplanation } from '@/lib/aiExplanationService';
+import { getAllReviews, saveSignalReview, reviewDecisionLabels, reviewDecisionChipStyles } from '@/lib/reviewService';
+import type { SignalEvidenceRow, ObservationQualityCheckRow, SignalAIExplanation, SignalReviewRow, SignalReviewDecision, EnvironmentalSignalStatus } from '@/types';
 
-const statusOrder: SignalStatus[] = ['action_required', 'awaiting_review', 'under_review', 'reviewed', 'dismissed'];
+const statusConfig: Record<EnvironmentalSignalStatus, { label: string; chip: string; dot: string }> = {
+  emerging: { label: 'Emerging', chip: 'bg-amber-50 text-amber-700 border-amber-200', dot: 'bg-amber-500' },
+  monitoring: { label: 'Monitoring', chip: 'bg-aqua-50 text-aqua-700 border-aqua-200', dot: 'bg-aqua-500' },
+  resolved: { label: 'Resolved', chip: 'bg-success-50 text-success-700 border-success-200', dot: 'bg-success-500' },
+  dismissed: { label: 'Dismissed', chip: 'bg-sand-100 text-sand-500 border-sand-200', dot: 'bg-sand-400' },
+};
+
+function formatDateTime(iso: string): string {
+  return new Date(iso).toLocaleString('en-AU', {
+    day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  });
+}
+
+type LoadMode = 'loading' | 'ready' | 'error';
+
+interface ReviewSignal {
+  signal: EnvironmentalSignalWithSite;
+  review: SignalReviewRow | null;
+}
 
 export function ReviewPage() {
-  const [items, setItems] = useState<ReviewItem[]>(mockReviewItems);
-  const [activeFilter, setActiveFilter] = useState<SignalStatus | 'all'>('all');
+  const [mode, setMode] = useState<LoadMode>('loading');
+  const [signals, setSignals] = useState<ReviewSignal[]>([]);
+  const [activeSignal, setActiveSignal] = useState<ReviewSignal | null>(null);
 
-  const updateStatus = (signalId: string, status: SignalStatus) => {
-    setItems((prev) => prev.map((item) => item.signalId === signalId ? { ...item, status } : item));
-  };
+  const load = useCallback(async () => {
+    setMode('loading');
+    try {
+      const [sigData, reviewMap] = await Promise.all([
+        fetchSignalsWithSites(),
+        getAllReviews(),
+      ]);
+      const enriched: ReviewSignal[] = sigData.map((signal) => ({
+        signal,
+        review: reviewMap.get(signal.id) ?? null,
+      }));
+      setSignals(enriched);
+      setMode('ready');
+    } catch {
+      setMode('error');
+    }
+  }, []);
 
-  const sorted = [...items].sort((a, b) => statusOrder.indexOf(a.status) - statusOrder.indexOf(b.status));
-  const filtered = activeFilter === 'all' ? sorted : sorted.filter((i) => i.status === activeFilter);
+  useEffect(() => { load(); }, [load]);
+
+  const awaitingReview = signals.filter((s) => !s.review);
+  const reviewed = signals.filter((s) => s.review);
 
   const counts = {
-    awaiting_review: items.filter((i) => i.status === 'awaiting_review').length,
-    under_review: items.filter((i) => i.status === 'under_review').length,
-    action_required: items.filter((i) => i.status === 'action_required').length,
-    reviewed: items.filter((i) => i.status === 'reviewed').length,
-    dismissed: items.filter((i) => i.status === 'dismissed').length,
+    awaiting: awaitingReview.length,
+    followUp: reviewed.filter((s) => s.review?.decision === 'confirmed_for_follow_up').length,
+    moreEvidence: reviewed.filter((s) => s.review?.decision === 'needs_more_evidence').length,
+    dismissed: reviewed.filter((s) => s.review?.decision === 'dismissed').length,
   };
 
-  const filters: { value: SignalStatus | 'all'; label: string; count: number }[] = [
-    { value: 'all', label: 'All', count: items.length },
-    { value: 'action_required', label: 'Action Required', count: counts.action_required },
-    { value: 'awaiting_review', label: 'Awaiting Review', count: counts.awaiting_review },
-    { value: 'under_review', label: 'Under Review', count: counts.under_review },
-    { value: 'reviewed', label: 'Reviewed', count: counts.reviewed },
-    { value: 'dismissed', label: 'Dismissed', count: counts.dismissed },
-  ];
+  if (mode === 'loading') return <LoadingState message="Loading review queue…" />;
+  if (mode === 'error') return <ErrorState message="We could not load the review queue. Please try again." onRetry={load} />;
 
   return (
     <>
       <PageHeader
         title="Human Review"
-        subtitle="Environmental experts review AI-generated signals and decide on action. AI recommends; humans decide."
+        subtitle="Environmental experts review deterministic signals and decide on action. AI assists with interpretation. Humans decide."
         icon={<ClipboardCheck className="w-5.5 h-5.5" />}
         breadcrumbs={[{ label: 'Home', to: '/' }, { label: 'Review' }]}
       />
 
-      {/* AI principle banner */}
-      <InfoBanner type="info" title="AI recommends. Humans decide." className="mb-6">
-        Every signal below was generated by AI pattern detection. Review the evidence, then choose to follow up, mark as reviewed, or dismiss.
+      <InfoBanner type="info" title="AI assists. Humans decide." className="mb-6">
+        Every signal below was generated by deterministic pattern detection from citizen observations. Review the evidence chain, then decide whether to request follow-up, ask for more evidence, or dismiss.
       </InfoBanner>
 
-      {/* Status summary */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
-        {filters.slice(1).map((f) => {
-          const config = statusIconConfig[f.value as SignalStatus];
-          const Icon = config.icon;
-          return (
-            <div key={f.value} className="surface p-4">
-              <div className="flex items-center gap-2 mb-1">
-                <Icon className={`w-4 h-4 ${config.color}`} />
-                <span className="text-xs font-medium text-sand-500">{f.label}</span>
-              </div>
-              <p className="text-2xl font-semibold text-sand-900 tabular-nums">{f.count}</p>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Filters */}
-      <div className="flex items-center gap-2 mb-6 overflow-x-auto scrollbar-thin pb-1">
-        {filters.map((f) => (
-          <button
-            key={f.value}
-            onClick={() => setActiveFilter(f.value)}
-            className={`px-3.5 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap border transition-all ${
-              activeFilter === f.value
-                ? 'bg-aqua-700 text-white border-aqua-700'
-                : 'bg-white text-sand-600 border-sand-200 hover:border-aqua-200 hover:text-aqua-700'
-            }`}
-          >
-            {f.label} ({f.count})
-          </button>
-        ))}
-      </div>
-
-      {/* Review items */}
-      {filtered.length > 0 ? (
-        <div className="space-y-4">
-          {filtered.map((item) => (
-            <ReviewCard key={item.signalId} item={item} onStatusChange={updateStatus} />
-          ))}
+      {/* Metrics */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+        <div className="surface p-4">
+          <div className="flex items-center gap-2 mb-1">
+            <Clock className="w-4 h-4 text-amber-500" />
+            <span className="text-xs font-medium text-sand-500">Awaiting Review</span>
+          </div>
+          <p className="text-2xl font-semibold text-sand-900 tabular-nums">{counts.awaiting}</p>
         </div>
-      ) : (
-        <EmptyState
-          title="Nothing to review"
-          message="All signals in this category have been processed."
-          icon={<CheckCircle2 className="w-8 h-8" />}
+        <div className="surface p-4">
+          <div className="flex items-center gap-2 mb-1">
+            <TrendingUp className="w-4 h-4 text-aqua-500" />
+            <span className="text-xs font-medium text-sand-500">Follow-up Requested</span>
+          </div>
+          <p className="text-2xl font-semibold text-sand-900 tabular-nums">{counts.followUp}</p>
+        </div>
+        <div className="surface p-4">
+          <div className="flex items-center gap-2 mb-1">
+            <AlertCircle className="w-4 h-4 text-amber-500" />
+            <span className="text-xs font-medium text-sand-500">More Evidence Needed</span>
+          </div>
+          <p className="text-2xl font-semibold text-sand-900 tabular-nums">{counts.moreEvidence}</p>
+        </div>
+        <div className="surface p-4">
+          <div className="flex items-center gap-2 mb-1">
+            <XCircle className="w-4 h-4 text-sand-400" />
+            <span className="text-xs font-medium text-sand-500">Dismissed</span>
+          </div>
+          <p className="text-2xl font-semibold text-sand-900 tabular-nums">{counts.dismissed}</p>
+        </div>
+      </div>
+
+      {/* Awaiting review */}
+      <section className="mb-8">
+        <h2 className="text-lg font-semibold text-sand-900 mb-4">Awaiting Human Review</h2>
+        {awaitingReview.length > 0 ? (
+          <div className="space-y-4">
+            {awaitingReview.map((s) => (
+              <ReviewQueueCard key={s.signal.id} signal={s.signal} onReview={() => setActiveSignal(s)} />
+            ))}
+          </div>
+        ) : (
+          <EmptyState
+            title="All signals reviewed"
+            message="No signals are currently awaiting human review."
+            icon={<CheckCircle2 className="w-8 h-8" />}
+          />
+        )}
+      </section>
+
+      {/* Recently reviewed */}
+      {reviewed.length > 0 && (
+        <section>
+          <h2 className="text-lg font-semibold text-sand-900 mb-4">Recently Reviewed</h2>
+          <div className="space-y-4">
+            {reviewed
+              .sort((a, b) => (b.review!.reviewed_at).localeCompare(a.review!.reviewed_at))
+              .map((s) => (
+                <ReviewedCard key={s.signal.id} signal={s.signal} review={s.review!} onReview={() => setActiveSignal(s)} />
+              ))}
+          </div>
+        </section>
+      )}
+
+      {/* Review drawer */}
+      {activeSignal && (
+        <ReviewDrawer
+          signal={activeSignal.signal}
+          existingReview={activeSignal.review}
+          onClose={() => setActiveSignal(null)}
+          onSaved={() => { setActiveSignal(null); load(); }}
         />
       )}
     </>
   );
 }
 
-const statusIconConfig: Record<SignalStatus, { icon: typeof Clock; color: string }> = {
-  active: { icon: AlertCircle, color: 'text-aqua-500' },
-  awaiting_review: { icon: Clock, color: 'text-amber-500' },
-  under_review: { icon: Eye, color: 'text-aqua-400' },
-  action_required: { icon: AlertCircle, color: 'text-error-500' },
-  reviewed: { icon: CheckCircle2, color: 'text-success-500' },
-  dismissed: { icon: XCircle, color: 'text-sand-400' },
-};
+// ── Review queue card (awaiting) ──────────────────────────
 
-function ReviewCard({ item, onStatusChange }: { item: ReviewItem; onStatusChange: (id: string, status: SignalStatus) => void }) {
+function ReviewQueueCard({
+  signal,
+  onReview,
+}: {
+  signal: EnvironmentalSignalWithSite;
+  onReview: () => void;
+}) {
+  const status = statusConfig[signal.status];
+  const siteName = signal.sites?.name ?? 'Unknown site';
+
   return (
     <div className="surface p-6">
       <div className="flex flex-col lg:flex-row gap-6">
-        {/* Left: signal info */}
         <div className="flex-1">
           <div className="flex flex-wrap items-center gap-2 mb-3">
-            <ConcernBadge level={item.concern} />
-            <StatusBadge status={item.status} />
+            <span className={`chip ${status.chip}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${status.dot}`} aria-hidden="true" />
+              {status.label}
+            </span>
+            <span className="chip bg-amber-50 text-amber-700 border-amber-200">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500" aria-hidden="true" />
+              Awaiting Human Review
+            </span>
           </div>
-          <h3 className="text-lg font-semibold text-sand-900">{item.title}</h3>
-          <p className="text-sm text-sand-500 mt-0.5">{item.siteName}</p>
+          <h3 className="text-lg font-semibold text-sand-900">{signal.title}</h3>
+          <p className="text-sm text-sand-500 mt-0.5">{siteName}{signal.sites?.region ? `, ${signal.sites.region}` : ''}</p>
 
           <div className="mt-4 grid sm:grid-cols-3 gap-3">
             <div className="surface-soft px-3 py-2.5">
-              <p className="text-xs text-sand-500">Evidence</p>
-              <p className="text-sm font-medium text-sand-800">{item.observationCount} observations · {item.photoCount} photos</p>
+              <p className="text-xs text-sand-500">Evidence Strength</p>
+              <p className="text-sm font-semibold text-sand-800 tabular-nums">{signal.strength}/100</p>
             </div>
             <div className="surface-soft px-3 py-2.5">
-              <p className="text-xs text-sand-500">Pattern</p>
-              <p className="text-sm font-medium text-sand-800">{item.patternDescription}</p>
+              <p className="text-xs text-sand-500">Observations</p>
+              <p className="text-sm font-medium text-sand-800 tabular-nums">{signal.observation_count}</p>
             </div>
             <div className="surface-soft px-3 py-2.5">
-              <p className="text-xs text-sand-500">Confidence</p>
-              <p className="text-sm font-semibold text-sand-800 tabular-nums">{item.confidence}%</p>
+              <p className="text-xs text-sand-500">Indicators</p>
+              <p className="text-sm font-medium text-sand-800 tabular-nums">{signal.indicator_count}</p>
             </div>
-          </div>
-
-          <div className="mt-4 p-4 rounded-xl bg-aqua-50 border border-aqua-100">
-            <p className="text-xs font-medium text-aqua-700 mb-1">Recommended next action</p>
-            <p className="text-sm text-sand-700">{item.recommendedAction}</p>
           </div>
         </div>
 
-        {/* Right: actions */}
-        <div className="lg:w-56 flex-shrink-0 space-y-2">
-          <Link to={`/signals/${item.signalId}`} className="block">
-            <button className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium bg-aqua-700 text-white rounded-xl hover:bg-aqua-800 transition-colors">
-              <Eye className="w-4 h-4" />
-              Review Evidence
+        <div className="lg:w-48 flex-shrink-0 flex flex-col gap-2">
+          <button
+            onClick={onReview}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium bg-aqua-700 text-white rounded-xl hover:bg-aqua-800 transition-colors"
+          >
+            <Eye className="w-4 h-4" />
+            Review Signal
+          </button>
+          <Link to={`/signals/${signal.id}`} className="block">
+            <button className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium bg-white text-sand-700 border border-sand-300 rounded-xl hover:bg-sand-50 transition-colors">
+              <FileText className="w-4 h-4" />
+              View Detail
             </button>
           </Link>
-          <button
-            onClick={() => onStatusChange(item.signalId, 'under_review')}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium bg-white text-sand-700 border border-sand-300 rounded-xl hover:bg-sand-50 transition-colors"
-          >
-            <FileText className="w-4 h-4" />
-            Request Follow-up
-          </button>
-          <button
-            onClick={() => onStatusChange(item.signalId, 'reviewed')}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium bg-white text-success-700 border border-success-200 rounded-xl hover:bg-success-50 transition-colors"
-          >
-            <CheckCircle2 className="w-4 h-4" />
-            Mark Reviewed
-          </button>
-          <button
-            onClick={() => onStatusChange(item.signalId, 'dismissed')}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium bg-white text-sand-500 border border-sand-200 rounded-xl hover:bg-sand-50 transition-colors"
-          >
-            <XCircle className="w-4 h-4" />
-            Dismiss Signal
-          </button>
         </div>
       </div>
+    </div>
+  );
+}
 
-      {/* Confidence meter */}
-      <div className="mt-5 pt-5 border-t border-sand-100">
-        <ConfidenceMeter value={item.confidence} size="sm" />
+// ── Reviewed card ─────────────────────────────────────────
+
+function ReviewedCard({
+  signal,
+  review,
+  onReview,
+}: {
+  signal: EnvironmentalSignalWithSite;
+  review: SignalReviewRow;
+  onReview: () => void;
+}) {
+  const siteName = signal.sites?.name ?? 'Unknown site';
+  const chipStyle = reviewDecisionChipStyles[review.decision];
+  const label = reviewDecisionLabels[review.decision];
+
+  return (
+    <div className="surface p-6">
+      <div className="flex flex-col lg:flex-row gap-6">
+        <div className="flex-1">
+          <div className="flex flex-wrap items-center gap-2 mb-3">
+            <span className={`chip ${chipStyle}`}>
+              <span className="w-1.5 h-1.5 rounded-full bg-sand-400" aria-hidden="true" />
+              {label}
+            </span>
+          </div>
+          <h3 className="text-lg font-semibold text-sand-900">{signal.title}</h3>
+          <p className="text-sm text-sand-500 mt-0.5">{siteName}</p>
+
+          <div className="mt-4 grid sm:grid-cols-3 gap-3">
+            <div className="surface-soft px-3 py-2.5">
+              <p className="text-xs text-sand-500">Evidence Strength</p>
+              <p className="text-sm font-semibold text-sand-800 tabular-nums">{signal.strength}/100</p>
+            </div>
+            <div className="surface-soft px-3 py-2.5">
+              <p className="text-xs text-sand-500">Reviewed</p>
+              <p className="text-sm font-medium text-sand-800">{formatDateTime(review.reviewed_at)}</p>
+            </div>
+            <div className="surface-soft px-3 py-2.5">
+              <p className="text-xs text-sand-500">Decision</p>
+              <p className="text-sm font-medium text-sand-800">{label}</p>
+            </div>
+          </div>
+
+          {review.notes && (
+            <div className="mt-3 p-3 rounded-lg bg-sand-50 border border-sand-100">
+              <p className="text-xs font-medium text-sand-500 mb-1">Reviewer notes</p>
+              <p className="text-sm text-sand-700 italic">"{review.notes}"</p>
+            </div>
+          )}
+        </div>
+
+        <div className="lg:w-48 flex-shrink-0 flex flex-col gap-2">
+          <button
+            onClick={onReview}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium bg-white text-sand-700 border border-sand-300 rounded-xl hover:bg-sand-50 transition-colors"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Change Decision
+          </button>
+          <Link to={`/signals/${signal.id}`} className="block">
+            <button className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium bg-white text-sand-700 border border-sand-300 rounded-xl hover:bg-sand-50 transition-colors">
+              <FileText className="w-4 h-4" />
+              View Detail
+            </button>
+          </Link>
+        </div>
       </div>
+    </div>
+  );
+}
+
+// ── Review drawer (slide-over) ────────────────────────────
+
+type DrawerMode = 'review' | 'confirm' | 'saving' | 'saved' | 'error';
+
+function ReviewDrawer({
+  signal,
+  existingReview,
+  onClose,
+  onSaved,
+}: {
+  signal: EnvironmentalSignalWithSite;
+  existingReview: SignalReviewRow | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [drawerMode, setDrawerMode] = useState<DrawerMode>('review');
+  const [pendingDecision, setPendingDecision] = useState<SignalReviewDecision | null>(null);
+  const [notes, setNotes] = useState(existingReview?.notes ?? '');
+  const [savedReview, setSavedReview] = useState<SignalReviewRow | null>(existingReview);
+  const [errorMsg, setErrorMsg] = useState(false);
+  const savingRef = useState(false);
+
+  // Evidence context
+  const [obsLinks, setObsLinks] = useState<SignalObservationWithDetails[]>([]);
+  const [evidence, setEvidence] = useState<SignalEvidenceRow[]>([]);
+  const [qualityChecks, setQualityChecks] = useState<Map<string, ObservationQualityCheckRow | null>>(new Map());
+  const [aiExplanation, setAiExplanation] = useState<SignalAIExplanation | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const [obs, ev] = await Promise.all([
+        fetchSignalObservationsWithDetails(signal.id),
+        getSignalEvidence(signal.id),
+      ]);
+      if (cancelled) return;
+      setObsLinks(obs);
+      setEvidence(ev);
+
+      const qChecks = new Map<string, ObservationQualityCheckRow | null>();
+      for (const link of obs) {
+        try {
+          const qc = await getObservationQualityCheck(link.observation_id);
+          qChecks.set(link.observation_id, qc);
+        } catch {
+          qChecks.set(link.observation_id, null);
+        }
+      }
+      if (!cancelled) setQualityChecks(qChecks);
+
+      try {
+        const existing = await getSignalExplanation(signal.id);
+        if (!cancelled) setAiExplanation(existing);
+      } catch {
+        if (!cancelled) setAiExplanation(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [signal.id]);
+
+  const handleGenerateAI = useCallback(async () => {
+    setAiLoading(true);
+    setAiError(false);
+    try {
+      const explanation = await generateSignalExplanation(signal.id);
+      setAiExplanation(explanation);
+    } catch {
+      setAiError(true);
+    } finally {
+      setAiLoading(false);
+    }
+  }, [signal.id]);
+
+  const handleConfirm = useCallback(async () => {
+    if (!pendingDecision || savingRef[0]) return;
+    savingRef[1](true);
+    setDrawerMode('saving');
+    setErrorMsg(false);
+    try {
+      const review = await saveSignalReview(signal.id, pendingDecision, notes);
+      setSavedReview(review);
+      setDrawerMode('saved');
+    } catch {
+      setErrorMsg(true);
+      setDrawerMode('error');
+    } finally {
+      savingRef[1](false);
+    }
+  }, [pendingDecision, notes, signal.id, savingRef]);
+
+  const siteName = signal.sites?.name ?? 'Unknown site';
+  const status = statusConfig[signal.status];
+  const reasoning = (signal.reasoning ?? []) as string[];
+
+  const confirmText: Record<SignalReviewDecision, string> = {
+    confirmed_for_follow_up: 'This will record that the signal should receive additional review or field verification.',
+    needs_more_evidence: 'This will record that more evidence is needed before a decision can be made.',
+    dismissed: 'This will record that the reviewer does not consider the current signal actionable.',
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end">
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-sand-900/30 backdrop-blur-sm" onClick={onClose} />
+
+      {/* Drawer */}
+      <div className="relative w-full max-w-2xl bg-sand-50 h-full overflow-y-auto shadow-2xl">
+        {/* Header */}
+        <div className="sticky top-0 z-10 bg-white border-b border-sand-200 px-6 py-4 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-sand-900">Review Signal</h2>
+          <button onClick={onClose} className="text-sand-400 hover:text-sand-600 transition-colors">
+            <XCircle className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-6">
+          {/* ── Saved state ── */}
+          {drawerMode === 'saved' && savedReview && (
+            <div className="space-y-6">
+              <div className="surface p-6 text-center">
+                <div className="w-12 h-12 rounded-full bg-success-50 flex items-center justify-center mx-auto mb-4">
+                  <CheckCircle2 className="w-7 h-7 text-success-500" />
+                </div>
+                <h3 className="text-lg font-semibold text-sand-900 mb-1">Review recorded</h3>
+                <p className="text-sm text-sand-500 mb-4">
+                  {reviewDecisionLabels[savedReview.decision]} — {formatDateTime(savedReview.reviewed_at)}
+                </p>
+                {savedReview.notes && (
+                  <div className="text-left p-3 rounded-lg bg-sand-50 border border-sand-100 mb-4">
+                    <p className="text-xs font-medium text-sand-500 mb-1">Notes</p>
+                    <p className="text-sm text-sand-700 italic">"{savedReview.notes}"</p>
+                  </div>
+                )}
+                <p className="text-xs text-sand-400 mb-4">
+                  This review decision does not change the environmental signal, its evidence, or the underlying observations.
+                </p>
+                <div className="flex flex-wrap gap-3 justify-center">
+                  <button onClick={onClose} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-aqua-700 rounded-lg hover:bg-aqua-800 transition-colors">
+                    Back to Review Queue
+                  </button>
+                  <Link to={`/signals/${signal.id}`} onClick={onSaved} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-sand-700 bg-white border border-sand-300 rounded-lg hover:bg-sand-50 transition-colors">
+                    View Signal
+                  </Link>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── Review / confirm / saving / error states ── */}
+          {drawerMode !== 'saved' && (
+            <>
+              {/* Signal summary */}
+              <div className="surface p-5">
+                <div className="flex flex-wrap items-center gap-2 mb-3">
+                  <span className={`chip ${status.chip}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${status.dot}`} aria-hidden="true" />
+                    {status.label}
+                  </span>
+                  {savedReview && (
+                    <span className={`chip ${reviewDecisionChipStyles[savedReview.decision]}`}>
+                      {reviewDecisionLabels[savedReview.decision]}
+                    </span>
+                  )}
+                </div>
+                <h3 className="text-base font-semibold text-sand-900">{signal.title}</h3>
+                <p className="text-sm text-sand-500 mt-0.5 flex items-center gap-1">
+                  <MapPin className="w-3.5 h-3.5" /> {siteName}{signal.sites?.region ? `, ${signal.sites.region}` : ''}
+                </p>
+                <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div>
+                    <p className="text-xs text-sand-500">Strength</p>
+                    <p className="text-sm font-semibold text-sand-800 tabular-nums">{signal.strength}/100</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-sand-500">Observations</p>
+                    <p className="text-sm font-medium text-sand-800 tabular-nums">{signal.observation_count}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-sand-500">Indicators</p>
+                    <p className="text-sm font-medium text-sand-800 tabular-nums">{signal.indicator_count}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-sand-500">Time Window</p>
+                    <p className="text-sm font-medium text-sand-800">{signal.time_window_hours}h</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Evidence Chain */}
+              <div className="surface p-5">
+                <div className="flex items-center gap-2.5 mb-3">
+                  <Layers className="w-5 h-5 text-aqua-600" />
+                  <h4 className="text-sm font-semibold text-sand-900">Evidence Chain</h4>
+                </div>
+                <div className="flex flex-col gap-2">
+                  <ChainStep label="Environmental Signal" value={signal.title} active />
+                  <ChainArrow />
+                  <ChainStep label="Supporting Observations" value={`${signal.observation_count} observations`} />
+                  <ChainArrow />
+                  <ChainStep label="Indicators" value={`${signal.indicator_count} indicators detected`} />
+                  <ChainArrow />
+                  <ChainStep label="Quality Information" value={qualityChecks.size > 0 ? `${[...qualityChecks.values()].filter(qc => qc && qc.overall_status !== 'ready').length} need clarification` : 'Pending'} />
+                </div>
+              </div>
+
+              {/* Deterministic reasoning */}
+              {reasoning.length > 0 && (
+                <div className="surface p-5">
+                  <div className="flex items-center gap-2.5 mb-3">
+                    <FileText className="w-5 h-5 text-aqua-600" />
+                    <h4 className="text-sm font-semibold text-sand-900">Deterministic Reasoning</h4>
+                  </div>
+                  <ul className="space-y-2">
+                    {reasoning.map((r, i) => (
+                      <li key={i} className="flex items-start gap-2 text-sm text-sand-700">
+                        <span className="w-1.5 h-1.5 rounded-full bg-aqua-400 flex-shrink-0 mt-1.5" />
+                        <span>{r}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* AI Evidence Brief */}
+              <div className="surface p-5">
+                <div className="flex items-center gap-2.5 mb-3">
+                  <Sparkles className="w-5 h-5 text-aqua-600" />
+                  <h4 className="text-sm font-semibold text-sand-900">AI Evidence Brief</h4>
+                </div>
+                {aiLoading ? (
+                  <div className="flex items-center gap-3 py-4">
+                    <div className="w-5 h-5 border-2 border-aqua-200 border-t-aqua-600 rounded-full animate-spin" />
+                    <p className="text-sm text-sand-500">Generating evidence brief…</p>
+                  </div>
+                ) : aiError ? (
+                  <div className="flex flex-col items-start gap-2 py-3">
+                    <div className="flex items-center gap-2 text-sm text-sand-600">
+                      <AlertTriangle className="w-4 h-4 text-amber-500" />
+                      <span>Could not generate the evidence brief. Please try again.</span>
+                    </div>
+                    <button onClick={handleGenerateAI} className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-white bg-aqua-700 rounded-lg hover:bg-aqua-800 transition-colors">
+                      <RefreshCw className="w-3.5 h-3.5" /> Retry
+                    </button>
+                  </div>
+                ) : aiExplanation ? (
+                  <div className="space-y-3">
+                    <div>
+                      {aiExplanation.is_fallback ? (
+                        <span className="chip bg-sand-100 text-sand-600 border-sand-200 text-xs">
+                          <span className="w-1.5 h-1.5 rounded-full bg-sand-400" aria-hidden="true" />
+                          Deterministic evidence summary
+                        </span>
+                      ) : (
+                        <span className="chip bg-aqua-50 text-aqua-700 border-aqua-200 text-xs">
+                          <span className="w-1.5 h-1.5 rounded-full bg-aqua-500" aria-hidden="true" />
+                          AI-assisted explanation
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-sm text-sand-700 leading-relaxed">{aiExplanation.summary}</p>
+                    {aiExplanation.supporting_evidence.length > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold text-sand-600 mb-1.5">Supporting Evidence</p>
+                        <ul className="space-y-1">
+                          {aiExplanation.supporting_evidence.map((e, i) => (
+                            <li key={i} className="flex items-start gap-2 text-xs text-sand-600">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-aqua-400 flex-shrink-0 mt-0.5" />
+                              <span>{e}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {aiExplanation.uncertainties.length > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold text-sand-600 mb-1.5">Uncertainty</p>
+                        <ul className="space-y-1">
+                          {aiExplanation.uncertainties.map((u, i) => (
+                            <li key={i} className="flex items-start gap-2 text-xs text-sand-600">
+                              <AlertTriangle className="w-3.5 h-3.5 text-amber-400 flex-shrink-0 mt-0.5" />
+                              <span>{u}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {aiExplanation.recommended_review && (
+                      <div>
+                        <p className="text-xs font-semibold text-sand-600 mb-1">Suggested Review</p>
+                        <p className="text-xs text-sand-600">{aiExplanation.recommended_review}</p>
+                      </div>
+                    )}
+                    <p className="text-xs text-sand-400 pt-2 border-t border-sand-100">{aiExplanation.disclaimer}</p>
+                  </div>
+                ) : (
+                  <div>
+                    <p className="text-sm text-sand-500 mb-3">
+                      Generate an AI-assisted explanation of the evidence chain.
+                    </p>
+                    <button onClick={handleGenerateAI} className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-white bg-aqua-700 rounded-lg hover:bg-aqua-800 transition-colors">
+                      <Sparkles className="w-3.5 h-3.5" />
+                      Generate Evidence Brief
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Source observations */}
+              {obsLinks.length > 0 && (
+                <div className="surface p-5">
+                  <div className="flex items-center gap-2.5 mb-3">
+                    <Database className="w-5 h-5 text-aqua-600" />
+                    <h4 className="text-sm font-semibold text-sand-900">Source Observations</h4>
+                  </div>
+                  <div className="space-y-2">
+                    {obsLinks.map((link) => {
+                      const obs = link.observations;
+                      const qc = qualityChecks.get(link.observation_id);
+                      const indicators = [obs.water_appearance, obs.visible_pollution, obs.odour, obs.vegetation_condition].filter(Boolean);
+                      return (
+                        <div key={link.id} className="surface-soft p-3">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs font-medium text-sand-700">{formatDateTime(obs.submitted_at)}</span>
+                            <span className="text-xs text-sand-400 capitalize">{link.contribution_type ?? 'contributing'}</span>
+                          </div>
+                          <p className="text-xs text-sand-500">
+                            {indicators.length > 0 ? indicators.join(' · ') : 'No indicators recorded'}
+                          </p>
+                          <div className="flex flex-wrap gap-1.5 mt-1.5">
+                            {qc && (
+                              <span className={`chip text-xs ${qc.overall_status === 'ready' ? 'bg-success-50 text-success-700 border-success-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+                                {qc.overall_status.replace(/_/g, ' ')}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Decision section */}
+              {drawerMode === 'review' && (
+                <div className="surface p-5">
+                  <h4 className="text-sm font-semibold text-sand-900 mb-1">Human Review Decision</h4>
+                  <p className="text-xs text-sand-500 mb-4">AI assists with interpretation and explanation. Human reviewers remain responsible for decisions and follow-up.</p>
+
+                  {/* Notes */}
+                  <textarea
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    placeholder="Add a short explanation for the review decision…"
+                    rows={3}
+                    className="w-full px-3.5 py-2.5 text-sm text-sand-800 bg-white border border-sand-200 rounded-lg focus:outline-none focus:border-aqua-400 focus:ring-1 focus:ring-aqua-400 resize-none mb-4"
+                  />
+
+                  <div className="grid sm:grid-cols-3 gap-3">
+                    <button
+                      onClick={() => { setPendingDecision('confirmed_for_follow_up'); setDrawerMode('confirm'); }}
+                      className="flex flex-col items-center gap-1.5 px-4 py-3 text-sm font-medium text-white bg-aqua-700 rounded-xl hover:bg-aqua-800 transition-colors"
+                    >
+                      <TrendingUp className="w-4 h-4" />
+                      Request Follow-up
+                    </button>
+                    <button
+                      onClick={() => { setPendingDecision('needs_more_evidence'); setDrawerMode('confirm'); }}
+                      className="flex flex-col items-center gap-1.5 px-4 py-3 text-sm font-medium text-sand-700 bg-white border border-amber-300 rounded-xl hover:bg-amber-50 transition-colors"
+                    >
+                      <AlertCircle className="w-4 h-4 text-amber-500" />
+                      Need More Evidence
+                    </button>
+                    <button
+                      onClick={() => { setPendingDecision('dismissed'); setDrawerMode('confirm'); }}
+                      className="flex flex-col items-center gap-1.5 px-4 py-3 text-sm font-medium text-sand-500 bg-white border border-sand-200 rounded-xl hover:bg-sand-50 transition-colors"
+                    >
+                      <XCircle className="w-4 h-4" />
+                      Dismiss Signal
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Confirm state */}
+              {drawerMode === 'confirm' && pendingDecision && (
+                <div className="surface p-5">
+                  <h4 className="text-sm font-semibold text-sand-900 mb-2">
+                    Confirm {pendingDecision === 'confirmed_for_follow_up' ? 'Follow-up?' : pendingDecision === 'needs_more_evidence' ? 'More Evidence Needed?' : 'Dismissal?'}
+                  </h4>
+                  <p className="text-sm text-sand-600 mb-4">{confirmText[pendingDecision]}</p>
+                  {notes.trim() && (
+                    <div className="p-3 rounded-lg bg-sand-50 border border-sand-100 mb-4">
+                      <p className="text-xs font-medium text-sand-500 mb-1">Notes</p>
+                      <p className="text-sm text-sand-700 italic">"{notes.trim()}"</p>
+                    </div>
+                  )}
+                  <div className="flex gap-3">
+                    <button
+                      onClick={handleConfirm}
+                      className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-aqua-700 rounded-lg hover:bg-aqua-800 transition-colors"
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                      Confirm
+                    </button>
+                    <button
+                      onClick={() => { setDrawerMode('review'); setPendingDecision(null); }}
+                      className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-sand-700 bg-white border border-sand-300 rounded-lg hover:bg-sand-50 transition-colors"
+                    >
+                      Go Back
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Saving state */}
+              {drawerMode === 'saving' && (
+                <div className="surface p-5 flex items-center gap-3">
+                  <div className="w-5 h-5 border-2 border-aqua-200 border-t-aqua-600 rounded-full animate-spin" />
+                  <p className="text-sm text-sand-500">Saving review decision…</p>
+                </div>
+              )}
+
+              {/* Error state */}
+              {drawerMode === 'error' && (
+                <div className="surface p-5">
+                  <div className="flex items-center gap-2 text-sm text-sand-600 mb-3">
+                    <AlertTriangle className="w-4.5 h-4.5 text-amber-500" />
+                    <span>We could not save the review decision. Please try again.</span>
+                  </div>
+                  <button
+                    onClick={() => setDrawerMode('review')}
+                    className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-aqua-700 rounded-lg hover:bg-aqua-800 transition-colors"
+                  >
+                    Back to Review
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Small shared components ───────────────────────────────
+
+function ChainStep({ label, value, active }: { label: string; value: string; active?: boolean }) {
+  return (
+    <div className={`flex items-center gap-3 p-2.5 rounded-xl border ${active ? 'border-aqua-200 bg-aqua-50' : 'border-sand-200 bg-white'}`}>
+      <span className={`w-2 h-2 rounded-full ${active ? 'bg-aqua-500' : 'bg-sand-300'}`} />
+      <div className="flex-1">
+        <p className="text-xs font-medium text-sand-500">{label}</p>
+        <p className="text-sm text-sand-800 font-medium">{value}</p>
+      </div>
+    </div>
+  );
+}
+
+function ChainArrow() {
+  return (
+    <div className="flex justify-center">
+      <ChevronDown className="w-4 h-4 text-sand-300" />
     </div>
   );
 }

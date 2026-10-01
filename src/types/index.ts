@@ -280,3 +280,19 @@ export interface SignalAIExplanation {
   provider: string | null;
   model: string | null;
 }
+
+// =========================================================
+// Phase 4D — Human Review types
+// =========================================================
+
+export type SignalReviewDecision = 'confirmed_for_follow_up' | 'needs_more_evidence' | 'dismissed';
+
+export interface SignalReviewRow {
+  id: string;
+  signal_id: string;
+  decision: SignalReviewDecision;
+  notes: string | null;
+  reviewed_at: string;
+  created_at: string;
+  updated_at: string;
+}
