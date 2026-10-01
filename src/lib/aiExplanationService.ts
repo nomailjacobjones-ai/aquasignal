@@ -2,9 +2,7 @@ import { supabase } from '@/lib/supabaseClient';
 import type {
   SignalAIExplanation,
   SignalAIExplanationRow,
-  EnvironmentalSignalRow,
   SignalEvidenceRow,
-  ObservationRow,
   ObservationQualityCheckRow,
 } from '@/types';
 import { fetchSignalById, fetchSignalObservationsWithDetails, getSignalEvidence, getObservationQualityCheck } from '@/lib/evidenceService';

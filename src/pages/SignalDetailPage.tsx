@@ -718,3 +718,168 @@ function ObsField({ icon, label, value }: { icon: React.ReactNode; label: string
     </div>
   );
 }
+
+function AIEvidenceBriefSection({
+  explanation,
+  loading,
+  error,
+  onGenerate,
+}: {
+  explanation: SignalAIExplanation | null;
+  loading: boolean;
+  error: boolean;
+  onGenerate: () => void;
+}) {
+  // ── Loading state ────────────────────────────────────
+  if (loading) {
+    return (
+      <div className="surface p-6 mb-6">
+        <div className="flex items-center gap-2.5 mb-4">
+          <Sparkles className="w-5 h-5 text-aqua-600" />
+          <h3 className="text-base font-semibold text-sand-900">AI Evidence Brief</h3>
+        </div>
+        <div className="flex items-center gap-3 py-8">
+          <div className="w-5 h-5 border-2 border-aqua-200 border-t-aqua-600 rounded-full animate-spin" />
+          <p className="text-sm text-sand-500">Generating evidence brief…</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Error state ──────────────────────────────────────
+  if (error && !explanation) {
+    return (
+      <div className="surface p-6 mb-6">
+        <div className="flex items-center gap-2.5 mb-4">
+          <Sparkles className="w-5 h-5 text-aqua-600" />
+          <h3 className="text-base font-semibold text-sand-900">AI Evidence Brief</h3>
+        </div>
+        <div className="flex flex-col items-start gap-3 py-4">
+          <div className="flex items-center gap-2 text-sm text-sand-600">
+            <AlertTriangle className="w-4.5 h-4.5 text-amber-500" />
+            <span>We could not generate the evidence brief. Please try again.</span>
+          </div>
+          <button
+            onClick={onGenerate}
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-aqua-700 rounded-lg hover:bg-aqua-800 transition-colors"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── No explanation yet ────────────────────────────────
+  if (!explanation) {
+    return (
+      <div className="surface p-6 mb-6">
+        <div className="flex items-center gap-2.5 mb-4">
+          <Sparkles className="w-5 h-5 text-aqua-600" />
+          <h3 className="text-base font-semibold text-sand-900">AI Evidence Brief</h3>
+        </div>
+        <p className="text-sm text-sand-500 mb-4">
+          Generate an AI-assisted explanation of the evidence chain above. The AI explains existing evidence — it does not create signals or change evidence strength.
+        </p>
+        <button
+          onClick={onGenerate}
+          className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-aqua-700 rounded-lg hover:bg-aqua-800 transition-colors"
+        >
+          <Sparkles className="w-4 h-4" />
+          Generate Evidence Brief
+        </button>
+      </div>
+    );
+  }
+
+  // ── Explanation display ───────────────────────────────
+  const isFallback = explanation.is_fallback;
+
+  return (
+    <div className="surface p-6 mb-6">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2.5">
+          <Sparkles className="w-5 h-5 text-aqua-600" />
+          <h3 className="text-base font-semibold text-sand-900">AI Evidence Brief</h3>
+        </div>
+        <button
+          onClick={onGenerate}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-sand-500 hover:text-aqua-700 transition-colors"
+        >
+          <RefreshCw className="w-3.5 h-3.5" />
+          Regenerate
+        </button>
+      </div>
+
+      {/* Source label */}
+      <div className="mb-4">
+        {isFallback ? (
+          <span className="chip bg-sand-100 text-sand-600 border-sand-200">
+            <span className="w-1.5 h-1.5 rounded-full bg-sand-400" aria-hidden="true" />
+            Deterministic evidence summary
+          </span>
+        ) : (
+          <span className="chip bg-aqua-50 text-aqua-700 border-aqua-200">
+            <span className="w-1.5 h-1.5 rounded-full bg-aqua-500" aria-hidden="true" />
+            AI-assisted explanation
+          </span>
+        )}
+      </div>
+
+      {/* Summary */}
+      <div className="mb-5">
+        <h4 className="text-sm font-semibold text-sand-700 mb-1.5">Summary</h4>
+        <p className="text-sm text-sand-700 leading-relaxed">{explanation.summary}</p>
+      </div>
+
+      {/* Supporting evidence */}
+      {explanation.supporting_evidence.length > 0 && (
+        <div className="mb-5">
+          <h4 className="text-sm font-semibold text-sand-700 mb-2">Supporting Evidence</h4>
+          <ul className="space-y-1.5">
+            {explanation.supporting_evidence.map((e, i) => (
+              <li key={i} className="flex items-start gap-2 text-sm text-sand-600">
+                <CheckCircle2 className="w-4 h-4 text-aqua-400 flex-shrink-0 mt-0.5" />
+                <span>{e}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Uncertainties */}
+      {explanation.uncertainties.length > 0 && (
+        <div className="mb-5">
+          <h4 className="text-sm font-semibold text-sand-700 mb-2">Uncertainty</h4>
+          <ul className="space-y-1.5">
+            {explanation.uncertainties.map((u, i) => (
+              <li key={i} className="flex items-start gap-2 text-sm text-sand-600">
+                <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+                <span>{u}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Suggested review */}
+      {explanation.recommended_review && (
+        <div className="mb-5">
+          <h4 className="text-sm font-semibold text-sand-700 mb-1.5">Suggested Review</h4>
+          <p className="text-sm text-sand-600 leading-relaxed">{explanation.recommended_review}</p>
+        </div>
+      )}
+
+      {/* Responsible AI note */}
+      <div className="pt-4 border-t border-sand-100">
+        <p className="text-xs text-sand-400 leading-relaxed">
+          {explanation.disclaimer}
+        </p>
+        <p className="text-xs text-sand-400 mt-1.5">
+          AI assists with explanation of existing evidence. It does not replace environmental expertise or establish causation.
+        </p>
+      </div>
+    </div>
+  );
+}
