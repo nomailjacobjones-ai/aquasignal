@@ -5,7 +5,7 @@ import {
   FileText, Droplets, Wind, Leaf, Bird, StickyNote, ImageOff,
   TrendingUp, Layers, ChevronDown, Database,
   Sparkles, RefreshCw, CheckCircle2, AlertTriangle,
-  ClipboardCheck,
+  ClipboardCheck, Heart, Users, Fish,
 } from 'lucide-react';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { InfoBanner } from '@/components/ui/InfoBanner';
@@ -28,7 +28,8 @@ import {
 import { getObservationQualityCheck } from '@/lib/evidenceService';
 import { getSignalExplanation, generateSignalExplanation } from '@/lib/aiExplanationService';
 import { getSignalReview, reviewDecisionLabels, reviewDecisionChipStyles } from '@/lib/reviewService';
-import type { SignalEvidenceRow, ObservationQualityCheckRow, EnvironmentalSignalStatus, SignalAIExplanation, SignalReviewRow } from '@/types';
+import { getOrGenerateOneHealthContext } from '@/lib/oneHealthService';
+import type { SignalEvidenceRow, ObservationQualityCheckRow, EnvironmentalSignalStatus, SignalAIExplanation, SignalReviewRow, SignalOneHealthContext } from '@/types';
 
 function formatDateTime(iso: string): string {
   return new Date(iso).toLocaleString('en-AU', {
@@ -78,6 +79,7 @@ export function SignalDetailPage() {
   const [aiError, setAiError] = useState(false);
   const aiGeneratingRef = useRef(false);
   const [review, setReview] = useState<SignalReviewRow | null>(null);
+  const [oneHealth, setOneHealth] = useState<SignalOneHealthContext | null>(null);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -122,6 +124,14 @@ export function SignalDetailPage() {
           setReview(existingReview);
         } catch {
           setReview(null);
+        }
+
+        // Fetch or generate One Health context
+        try {
+          const ctx = await getOrGenerateOneHealthContext(sig, evidence);
+          setOneHealth(ctx);
+        } catch {
+          setOneHealth(null);
         }
 
         setMode('signal');
@@ -412,6 +422,9 @@ export function SignalDetailPage() {
           error={aiError}
           onGenerate={handleGenerateAI}
         />
+
+        {/* One Health Context */}
+        <OneHealthContextSection context={oneHealth} />
 
         {/* Supporting observations */}
         {signalObs.length > 0 && (
@@ -922,6 +935,64 @@ function AIEvidenceBriefSection({
         <p className="text-xs text-sand-400 mt-1.5">
           AI assists with explanation of existing evidence. It does not replace environmental expertise or establish causation.
         </p>
+      </div>
+    </div>
+  );
+}
+
+function OneHealthContextSection({ context }: { context: SignalOneHealthContext | null }) {
+  if (!context) return null;
+
+  return (
+    <div className="surface p-6 mb-6">
+      <div className="flex items-center gap-2.5 mb-4">
+        <Heart className="w-5 h-5 text-aqua-600" />
+        <h3 className="text-base font-semibold text-sand-900">One Health Context</h3>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <div className="surface-soft p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <Leaf className="w-4 h-4 text-aqua-500" />
+            <span className="chip bg-aqua-50 text-aqua-700 border-aqua-200 text-xs">Ecosystem</span>
+          </div>
+          <p className="text-xs font-medium text-sand-500 mb-1">Context</p>
+          <p className="text-sm text-sand-700 leading-relaxed">{context.ecosystem_context}</p>
+        </div>
+        <div className="surface-soft p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <Fish className="w-4 h-4 text-aqua-500" />
+            <span className="chip bg-aqua-50 text-aqua-700 border-aqua-200 text-xs">Biodiversity & Animals</span>
+          </div>
+          <p className="text-xs font-medium text-sand-500 mb-1">Context</p>
+          <p className="text-sm text-sand-700 leading-relaxed">{context.biodiversity_context}</p>
+        </div>
+        <div className="surface-soft p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <Users className="w-4 h-4 text-aqua-500" />
+            <span className="chip bg-aqua-50 text-aqua-700 border-aqua-200 text-xs">Human Wellbeing</span>
+          </div>
+          <p className="text-xs font-medium text-sand-500 mb-1">Context</p>
+          <p className="text-sm text-sand-700 leading-relaxed">{context.human_wellbeing_context}</p>
+        </div>
+      </div>
+
+      {context.context_notes.length > 0 && (
+        <div className="mt-4 pt-4 border-t border-sand-100">
+          <p className="text-xs font-medium text-sand-500 mb-2">Context Notes</p>
+          <ul className="space-y-1.5">
+            {context.context_notes.map((note, i) => (
+              <li key={i} className="flex items-start gap-2 text-xs text-sand-500">
+                <span className="w-1.5 h-1.5 rounded-full bg-sand-300 flex-shrink-0 mt-1.5" />
+                <span>{note}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <div className="mt-4 pt-4 border-t border-sand-100">
+        <p className="text-xs text-sand-400 leading-relaxed">{context.disclaimer}</p>
       </div>
     </div>
   );

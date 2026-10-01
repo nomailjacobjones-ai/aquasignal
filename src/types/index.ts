@@ -296,3 +296,28 @@ export interface SignalReviewRow {
   created_at: string;
   updated_at: string;
 }
+
+// =========================================================
+// Phase 5A — One Health Context types
+// =========================================================
+
+export interface SignalOneHealthContextRow {
+  id: string;
+  signal_id: string;
+  ecosystem_context: string;
+  biodiversity_context: string;
+  human_wellbeing_context: string;
+  context_notes: string[];
+  disclaimer: string;
+  engine_type: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SignalOneHealthContext {
+  ecosystem_context: string;
+  biodiversity_context: string;
+  human_wellbeing_context: string;
+  context_notes: string[];
+  disclaimer: string;
+}

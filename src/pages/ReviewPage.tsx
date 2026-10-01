@@ -4,6 +4,7 @@ import {
   ClipboardCheck, ArrowRight, Eye, FileText, CheckCircle2,
   XCircle, Clock, AlertCircle, TrendingUp, Layers, Database,
   Sparkles, RefreshCw, AlertTriangle, ChevronDown, MapPin,
+  Heart,
 } from 'lucide-react';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { InfoBanner } from '@/components/ui/InfoBanner';
@@ -12,7 +13,8 @@ import { fetchSignalsWithSites, fetchSignalObservationsWithDetails, getSignalEvi
 import { getObservationQualityCheck } from '@/lib/evidenceService';
 import { getSignalExplanation, generateSignalExplanation } from '@/lib/aiExplanationService';
 import { getAllReviews, saveSignalReview, reviewDecisionLabels, reviewDecisionChipStyles } from '@/lib/reviewService';
-import type { SignalEvidenceRow, ObservationQualityCheckRow, SignalAIExplanation, SignalReviewRow, SignalReviewDecision, EnvironmentalSignalStatus } from '@/types';
+import { getOrGenerateOneHealthContext } from '@/lib/oneHealthService';
+import type { SignalEvidenceRow, ObservationQualityCheckRow, SignalAIExplanation, SignalReviewRow, SignalReviewDecision, EnvironmentalSignalStatus, SignalOneHealthContext } from '@/types';
 
 const statusConfig: Record<EnvironmentalSignalStatus, { label: string; chip: string; dot: string }> = {
   emerging: { label: 'Emerging', chip: 'bg-amber-50 text-amber-700 border-amber-200', dot: 'bg-amber-500' },
@@ -327,6 +329,7 @@ function ReviewDrawer({
   const [aiExplanation, setAiExplanation] = useState<SignalAIExplanation | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState(false);
+  const [oneHealth, setOneHealth] = useState<SignalOneHealthContext | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -355,6 +358,13 @@ function ReviewDrawer({
         if (!cancelled) setAiExplanation(existing);
       } catch {
         if (!cancelled) setAiExplanation(null);
+      }
+
+      try {
+        const ctx = await getOrGenerateOneHealthContext(signal, ev);
+        if (!cancelled) setOneHealth(ctx);
+      } catch {
+        if (!cancelled) setOneHealth(null);
       }
     })();
     return () => { cancelled = true; };
@@ -606,6 +616,22 @@ function ReviewDrawer({
                   </div>
                 )}
               </div>
+
+              {/* One Health Context */}
+              {oneHealth && (
+                <div className="surface p-5">
+                  <div className="flex items-center gap-2.5 mb-3">
+                    <Heart className="w-5 h-5 text-aqua-600" />
+                    <h4 className="text-sm font-semibold text-sand-900">One Health Context</h4>
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-xs text-sand-500"><span className="font-medium text-sand-600">Ecosystem:</span> {oneHealth.ecosystem_context}</p>
+                    <p className="text-xs text-sand-500"><span className="font-medium text-sand-600">Biodiversity:</span> {oneHealth.biodiversity_context}</p>
+                    <p className="text-xs text-sand-500"><span className="font-medium text-sand-600">Human wellbeing:</span> {oneHealth.human_wellbeing_context}</p>
+                  </div>
+                  <p className="text-xs text-sand-400 mt-3 pt-2 border-t border-sand-100">{oneHealth.disclaimer}</p>
+                </div>
+              )}
 
               {/* Source observations */}
               {obsLinks.length > 0 && (
