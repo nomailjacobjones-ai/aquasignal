@@ -340,8 +340,8 @@ export function buildNativeJsonExport(
     site: site ? {
       id: site.id,
       name: site.name,
-      region: site.region,
-      city: site.city,
+      region: site.region ?? null,
+      city: site.city ?? null,
       latitude: site.latitude,
       longitude: site.longitude,
     } : null,
