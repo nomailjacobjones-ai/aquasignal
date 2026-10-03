@@ -7,7 +7,7 @@ import { InfoBanner } from '@/components/ui/InfoBanner';
 
 const workflowSteps = [
   { label: 'Observe', icon: Eye, description: 'Citizens report freshwater conditions' },
-  { label: 'Validate', icon: Brain, description: 'AI quality gate checks consistency' },
+  { label: 'Validate', icon: Brain, description: 'Quality Gate checks consistency'},
   { label: 'Understand', icon: Link2, description: 'Evidence chain builds the signal' },
   { label: 'Act', icon: ClipboardCheck, description: 'Experts review and decide' },
 ];
@@ -20,7 +20,7 @@ const problemPoints = [
 
 const howItWorks = [
   { icon: Eye, title: 'Citizen Observation', text: 'Community members report what they see — water appearance, odour, flow, vegetation, wildlife — using simple citizen-friendly language.' },
-  { icon: Brain, title: 'AI Quality Gate', text: 'Each observation passes through an AI quality gate that checks consistency, flags incomplete data, and organises related reports.' },
+  { icon: Brain, title: 'Quality Gate', text: 'Each observation passes through a deterministic quality gate that checks consistency, flags incomplete data, and organises related reports.' },
   { icon: Link2, title: 'Evidence Chain', text: 'Related observations are linked into an explainable evidence chain — every signal shows exactly why it was generated.' },
   { icon: ClipboardCheck, title: 'Human Review', text: 'Environmental experts review the evidence, request follow-up, and decide on action. AI recommends; humans decide.' },
 ];
@@ -304,10 +304,10 @@ export function LandingPage() {
               <h2 className="text-3xl sm:text-4xl font-display font-semibold text-sand-900">Action Centre</h2>
               <p className="mt-3 text-lg text-sand-600 leading-relaxed">
                 Environmental officers get a clear, prioritised view of signals that need attention —
-                with evidence, confidence levels, and recommended actions attached.
+                with evidence, evidence strength, and recommended actions attached.
               </p>
               <ul className="mt-6 space-y-3">
-                {['Prioritised queue by concern and confidence', 'Full evidence chain attached to each signal', 'Clear status tracking from review to action', 'AI recommends next steps — humans decide'].map((item) => (
+                {['Prioritised queue by evidence strength', 'Full evidence chain attached to each signal', 'Clear status tracking from review to action', 'AI assists with explanation — humans decide'].map((item) => (
                   <li key={item} className="flex items-start gap-2.5 text-sm text-sand-700">
                     <div className="flex-shrink-0 w-5 h-5 rounded-full bg-aqua-100 text-aqua-700 flex items-center justify-center mt-0.5">
                       <ClipboardCheck className="w-3 h-3" />

@@ -68,7 +68,7 @@ export function QualityCheckSection({ state, result, onRecheck, onUpdate, onCont
           <div>
             <h3 className="text-sm font-semibold text-sand-900">Checking observation…</h3>
             <p className="text-sm text-sand-500 mt-0.5">
-              The AI quality gate is reviewing your observation for completeness and consistency.
+              The Quality Gate is reviewing your observation for completeness and consistency.
             </p>
           </div>
         </div>
@@ -86,7 +86,7 @@ export function QualityCheckSection({ state, result, onRecheck, onUpdate, onCont
           <div className="flex-1">
             <h3 className="text-sm font-semibold text-sand-900">Quality check unavailable</h3>
             <p className="text-sm text-sand-500 mt-0.5">
-              Your observation can still be submitted. An AI quality check was not available.
+              Your observation can still be submitted. A quality check was not available.
             </p>
           </div>
         </div>
@@ -189,7 +189,7 @@ export function QualityCheckSection({ state, result, onRecheck, onUpdate, onCont
       <InfoBanner type="info">
         <span className="flex items-center gap-1.5">
           <Brain className="w-4 h-4" />
-          AI assists with data quality and consistency checks. The citizen observation remains the source of truth. Environmental experts make final decisions.
+          The Quality Gate assists with data quality and consistency checks. The citizen observation remains the source of truth. Environmental experts make final decisions.
         </span>
       </InfoBanner>
 

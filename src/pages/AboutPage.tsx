@@ -1,4 +1,4 @@
-import { Info, Droplets, Leaf, Bird, HeartPulse, Brain, Shield, Users, Link2, Eye } from 'lucide-react';
+import { Info, Droplets, Leaf, Bird, HeartPulse, Brain, Shield, Users, Link2, Eye, Sparkles, FileJson } from 'lucide-react';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { SectionHeader } from '@/components/ui/PageHeader';
 import { InfoBanner } from '@/components/ui/InfoBanner';
@@ -26,7 +26,7 @@ export function AboutPage() {
             AquaSignal is a human-in-the-loop environmental intelligence platform that transforms citizen freshwater
             observations into explainable environmental signals. It helps communities, researchers, and
             decision-makers work together — turning scattered field reports into structured, traceable evidence
-            that experts can review and act on with confidence.
+            that experts can review and act on.
           </p>
           <p className="mt-4 text-sand-600 leading-relaxed">
             The platform is built for the <strong>IEEE OneAquaHealth Global Hackathon 2026</strong> and is currently
@@ -97,10 +97,10 @@ export function AboutPage() {
             </div>
             <ul className="space-y-2.5">
               {[
-                'Checks observation consistency and flags incomplete data',
+                'Checks observation completeness and flags inconsistent data',
                 'Organises related observations by site, time, and pattern',
-                'Detects patterns that may indicate environmental changes',
                 'Generates explainable evidence chains for each signal',
+                'Provides AI-assisted explanation of existing evidence',
                 'Recommends next actions for expert review',
               ].map((item) => (
                 <li key={item} className="flex items-start gap-2.5 text-sm text-sand-700">
@@ -150,10 +150,13 @@ export function AboutPage() {
           <ol className="space-y-4">
             {[
               { icon: Eye, title: 'Citizen Observation', text: 'Community members report freshwater conditions using simple, citizen-friendly language.' },
-              { icon: Brain, title: 'AI Quality Gate', text: 'Observations pass through consistency checks. Incomplete data is flagged, not hidden.' },
-              { icon: Link2, title: 'Evidence Chain', text: 'Related observations are linked into a transparent, explainable evidence chain.' },
-              { icon: Users, title: 'Human Review', text: 'Environmental experts review evidence, request follow-up, and decide on action.' },
-              { icon: Shield, title: 'One Health Action', text: 'Reviewed signals feed into environmental and public health decision-making.' },
+              { icon: Brain, title: 'Quality Gate', text: 'A deterministic rules engine checks each observation for completeness and consistency. Incomplete data is flagged, not hidden.' },
+              { icon: Link2, title: 'Signal Engine', text: 'Multiple observations at the same site within a time window are evaluated for recurring indicators. If thresholds are met, an environmental signal is generated.' },
+              { icon: Link2, title: 'Evidence Chain', text: 'Every signal is traceable to its source observations, indicators, and quality checks. Nothing is hidden.' },
+              { icon: Sparkles, title: 'AI Evidence Brief', text: 'An AI-assisted explanation of the evidence is generated. If no live AI is configured, a deterministic fallback is used — clearly labelled, never presented as AI-generated.' },
+              { icon: Leaf, title: 'One Health Context', text: 'Cautious contextual statements about why a pattern may matter for ecosystem health, biodiversity, and human wellbeing.' },
+              { icon: Users, title: 'Human Review', text: 'Environmental experts review evidence, request follow-up, and decide on action. AI assists; humans decide.' },
+              { icon: FileJson, title: 'FHIR Interoperability Export', text: 'The evidence package can be exported as FHIR R4-compatible JSON, native JSON, or CSV for interoperability.' },
             ].map((step, idx) => {
               const Icon = step.icon;
               return (
@@ -162,7 +165,7 @@ export function AboutPage() {
                     <div className="w-10 h-10 rounded-xl bg-aqua-700 text-white flex items-center justify-center">
                       <Icon className="w-5 h-5" />
                     </div>
-                    {idx < 4 && <div className="w-0.5 h-8 bg-aqua-200 mt-1" />}
+                    {idx < 7 && <div className="w-0.5 h-8 bg-aqua-200 mt-1" />}
                   </div>
                   <div className="pt-1.5">
                     <h4 className="text-sm font-semibold text-sand-900">{step.title}</h4>
@@ -176,10 +179,10 @@ export function AboutPage() {
       </section>
 
       {/* Disclaimer */}
-      <InfoBanner type="warning" title="Prototype notice">
+        <InfoBanner type="warning" title="Prototype notice">
         AquaSignal is a prototype developed for the IEEE OneAquaHealth Global Hackathon 2026. It is not a
-        regulatory or medical tool. All signals are AI-assisted recommendations for expert review — not
-        confirmed environmental facts.
+        regulatory or medical tool. Environmental signals are deterministic pattern detections for expert review — not
+        confirmed environmental facts. AI assists with explanation; humans decide.
       </InfoBanner>
     </>
   );

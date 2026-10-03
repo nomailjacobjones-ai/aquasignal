@@ -152,7 +152,7 @@ export interface ObservationWithSite extends ObservationRow {
 }
 
 // =========================================================
-// Phase 3 — AI Quality Gate types
+// Phase 3 — Quality Gate types
 // =========================================================
 
 export type QualityGateStatus = 'ready' | 'needs_clarification' | 'insufficient_information';

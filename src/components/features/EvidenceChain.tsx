@@ -10,7 +10,7 @@ interface EvidenceChainProps {
 
 const chainSteps = [
   { label: 'Observation', icon: 'observation', description: 'Citizen reports environmental conditions' },
-  { label: 'Validation', icon: 'validation', description: 'AI quality gate checks consistency' },
+  { label: 'Validation', icon: 'validation', description: 'Quality Gate checks consistency' },
   { label: 'Corroboration', icon: 'corroboration', description: 'Multiple observations cross-referenced' },
   { label: 'Signal', icon: 'signal', description: 'Pattern identified and evidence organised' },
   { label: 'Human Review', icon: 'review', description: 'Expert reviews and decides on action' },
@@ -67,7 +67,7 @@ export function EvidenceChain({ evidence, explanation }: EvidenceChainProps) {
             </div>
             <div>
               <h3 className="text-base font-semibold text-sand-900">Why was this signal generated?</h3>
-              <p className="text-sm text-sand-500">Transparent explanation of the AI's pattern detection</p>
+              <p className="text-sm text-sand-500">Transparent explanation of the deterministic pattern detection</p>
             </div>
           </div>
           <ChevronDown className={`w-5 h-5 text-sand-400 transition-transform duration-300 ${expanded ? 'rotate-180' : ''}`} />
