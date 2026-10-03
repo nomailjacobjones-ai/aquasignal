@@ -2,9 +2,60 @@
 
 [![Open in Bolt](https://bolt.new/static/open-in-bolt.svg)](https://bolt.new/~/sb1-yc79sceg)
 
+AquaSignal is a prototype environmental intelligence platform that turns citizen freshwater observations into explainable environmental signals. It was built for the IEEE OneAquaHealth Global Hackathon 2026.
+
+## What AquaSignal does
+
+Communities report what they see at freshwater sites — water appearance, odour, flow, vegetation condition, visible pollution, and wildlife. AquaSignal organises those reports through a structured pipeline:
+
+1. **Citizen Observation** — Community members submit structured observations with optional photographs.
+2. **Quality Gate** — A deterministic rules engine checks each observation for completeness and internal consistency before it is treated as stronger evidence.
+3. **Signal Engine** — Multiple observations at the same site within a time window are evaluated for recurring indicators. If the deterministic thresholds are met, an environmental signal is generated with an evidence-strength score (0–100).
+4. **Evidence Chain** — Every signal is traceable to its source observations, indicators, and quality checks. Nothing is hidden.
+5. **AI Evidence Brief** — An AI-assisted explanation of the evidence is generated through a secure Edge Function. If no AI provider is configured, a deterministic fallback is used — clearly labelled as a "Deterministic evidence summary", never as AI-generated.
+6. **One Health Context** — Cautious contextual statements about why a detected pattern may matter for ecosystem health, biodiversity, and human wellbeing. These are context, not medical diagnoses, disease predictions, or causation claims.
+7. **Human Review** — Environmental experts review signals and decide whether to request follow-up, ask for more evidence, or dismiss. AI assists; humans decide.
+8. **FHIR Interoperability Export** — The evidence package can be exported as FHIR R4-compatible JSON, native JSON, or CSV.
+
+## Architecture
+
+- **Frontend:** React + TypeScript + Vite + Tailwind CSS
+- **Backend:** Supabase (PostgreSQL database, storage, Edge Functions)
+- **Icons:** Lucide React
+- **Routing:** React Router
+
+### Key services
+
+| Service | Purpose |
+|---------|---------|
+| `observationService.ts` | Citizen observation submission + photo upload |
+| `qualityGate.ts` | Deterministic quality-check rules engine |
+| `signalEngine.ts` | Deterministic signal detection from observation patterns |
+| `evidenceService.ts` | Signal CRUD, evidence chain, observation linking |
+| `aiExplanationService.ts` | AI Evidence Brief generation + deterministic fallback |
+| `oneHealthService.ts` | Deterministic One Health context generation |
+| `reviewService.ts` | Human review workflow |
+| `fhirService.ts` | FHIR R4-compatible export, native JSON, CSV |
+| `dashboardService.ts` | Dashboard metrics, site/observation queries |
+
+### Database tables
+
+- `sites` — Monitoring locations with coordinates
+- `observations` — Citizen environmental reports
+- `observation_photos` — Photo metadata linked to observations
+- `observation_quality_checks` — Quality gate results per observation
+- `environmental_signals` — Detected environmental patterns
+- `signal_observations` — Signal-to-observation links
+- `signal_evidence` — Evidence items supporting each signal
+- `signal_ai_explanations` — AI Evidence Briefs (one per signal)
+- `signal_reviews` — Human review decisions (one per signal)
+- `signal_one_health_context` — One Health context statements (one per signal)
+
+All tables have Row Level Security enabled.
+
 ## FHIR Interoperability
 
-AquaSignal supports a prototype FHIR R4-compatible export of environmental observation and signal data.
+AquaSignal supports a **FHIR R4-compatible prototype export** of environmental observation and signal data.
 
 ### Resources
 
@@ -86,12 +137,51 @@ https://aquasignal.app/fhir/CodeSystem/environmental-signal
 }
 ```
 
+### OAH-FHIR status
+
+The OneAquaHealth FHIR Implementation Guide exists as a **draft CI build (version 0.1.0-ci-build)** at `http://hl7.eu/fhir/ig/oah/`. AquaSignal's export is a **FHIR R4-compatible prototype** and does not claim formal conformance to the draft OAH-FHIR profiles. The OAH IG is still in draft and profiles may change. When the IG stabilises, the exporter can be aligned to specific OAH profiles.
+
 ### Important Disclaimers
 
 - This is **not** formal HL7 certification or conformance testing.
-- This is **not** a validated OneAquaHealth profile.
+- This is **not** a validated OneAquaHealth FHIR profile.
 - Environmental observations are citizen reports, not laboratory-confirmed measurements.
 - The derived signal is a deterministic pattern detection, not a clinical diagnosis.
 - One Health context statements are contextual, not medical advice or disease predictions.
 - No patient records, medical records, or personal health information are created or exported.
 - The export is local and downloadable — no data is uploaded to any external FHIR server.
+
+## Setup
+
+### Environment variables
+
+The following are pre-configured in the Bolt environment:
+
+- `VITE_SUPABASE_URL` — Supabase project URL
+- `VITE_SUPABASE_ANON_KEY` — Supabase anonymous key (public, read-only client access)
+
+No secrets are exposed in client code. The `OPENAI_API_KEY` for the AI Evidence Brief Edge Function is optional and stored server-side only. If not configured, the deterministic fallback is used.
+
+### Running locally
+
+```bash
+npm install
+npm run dev
+```
+
+### Build
+
+```bash
+npm run build
+npm run typecheck
+```
+
+## Limitations
+
+- AquaSignal is a prototype. It does not diagnose disease, establish exposure, or prove causation.
+- Environmental signals are generated by deterministic pattern detection from citizen observations. They have not been scientifically validated.
+- AI assists with explanation. Environmental experts remain responsible for interpretation and action.
+- The FHIR export is a prototype R4-compatible package, not a formally conformant implementation.
+- The OAH-FHIR Implementation Guide is still in draft CI build status.
+- No authentication is implemented. The prototype uses anon-level Supabase access with RLS policies.
+- Prototype data is seeded for demonstration at Riverside Site A.

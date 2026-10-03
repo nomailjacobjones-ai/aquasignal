@@ -163,7 +163,7 @@ export function LandingPage() {
                   </li>
                 ))}
               </ul>
-              <Link to="/signals/sig-001" className="mt-6 inline-flex items-center gap-1.5 text-aqua-700 font-medium hover:text-aqua-800 transition-colors">
+              <Link to="/signals" className="mt-6 inline-flex items-center gap-1.5 text-aqua-700 font-medium hover:text-aqua-800 transition-colors">
                 See an example evidence chain
                 <ArrowRight className="w-4 h-4" />
               </Link>

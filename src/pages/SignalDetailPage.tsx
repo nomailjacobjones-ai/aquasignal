@@ -30,6 +30,7 @@ import { getSignalExplanation, generateSignalExplanation } from '@/lib/aiExplana
 import { getSignalReview, reviewDecisionLabels, reviewDecisionChipStyles } from '@/lib/reviewService';
 import { getOrGenerateOneHealthContext } from '@/lib/oneHealthService';
 import { buildSignalBundle, buildNativeJsonExport, buildCsvExport, downloadFhir, downloadNativeJson, downloadCsv } from '@/lib/fhirService';
+import { supabase } from '@/lib/supabaseClient';
 import type { SignalEvidenceRow, ObservationQualityCheckRow, EnvironmentalSignalStatus, SignalAIExplanation, SignalReviewRow, SignalOneHealthContext, ObservationPhotoRow } from '@/types';
 
 function formatDateTime(iso: string): string {
@@ -1043,16 +1044,24 @@ function ExportPanel({
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState(false);
 
-  const handleFhir = () => {
+  const handleFhir = async () => {
     setExporting(true);
     setError(false);
     try {
+      const observationIds = signalObs.map((so) => so.observation_id);
       const allPhotos: ObservationPhotoRow[] = [];
       const photoUrls = new Map<string, string>();
-      for (const so of signalObs) {
-        for (const photo of (so as SignalObservationWithDetails & { observations: { photos?: ObservationPhotoRow[] } }).observations?.photos ?? []) {
-          allPhotos.push(photo);
-          photoUrls.set(photo.id, getPhotoUrl(photo.storage_path));
+      if (observationIds.length > 0) {
+        const { data: photos, error: photoError } = await supabase
+          .from('observation_photos')
+          .select('*')
+          .in('observation_id', observationIds)
+          .order('created_at', { ascending: true });
+        if (!photoError && photos) {
+          for (const photo of photos as ObservationPhotoRow[]) {
+            allPhotos.push(photo);
+            photoUrls.set(photo.id, getPhotoUrl(photo.storage_path));
+          }
         }
       }
       const observations = signalObs.map((so) => so.observations);
