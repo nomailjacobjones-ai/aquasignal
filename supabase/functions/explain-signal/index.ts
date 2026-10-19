@@ -3,6 +3,7 @@
 // sends a compact evidence package to an AI provider (if configured), and returns
 // a validated structured explanation. Falls back to a deterministic explanation
 // if no AI secret is set, the provider is unavailable, or the response is malformed.
+//
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -173,7 +174,7 @@ Deno.serve(async (req: Request) => {
   if (req.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), {
       status: 405,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 
@@ -184,14 +185,14 @@ Deno.serve(async (req: Request) => {
     if (typeof signal_id !== 'string') {
       return new Response(JSON.stringify({ error: 'signal_id is required' }), {
         status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     if (!evidence_package || typeof evidence_package !== 'object') {
       return new Response(JSON.stringify({ error: 'evidence_package is required' }), {
         status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -210,12 +211,12 @@ Deno.serve(async (req: Request) => {
       model: isFallback ? null : 'gpt-4o-mini',
     }), {
       status: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
     return new Response(JSON.stringify({ error: 'Internal error' }), {
       status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });
